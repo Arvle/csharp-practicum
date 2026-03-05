@@ -1,0 +1,23 @@
+/* src/App.css */
+.loading-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: #1e1e1e;
+}
+
+.loading-content {
+    text-align: center;
+}
+
+.loading-content i {
+    font-size: 48px;
+    color: #007acc;
+    margin-bottom: 16px;
+}
+
+.loading-content span {
+    color: #8b949e;
+    font-size: 14px;
+}
