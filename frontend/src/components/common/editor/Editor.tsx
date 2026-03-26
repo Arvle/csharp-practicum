@@ -5,21 +5,25 @@ interface EditorProps {
     value: string;
     onChange: (value: string) => void;
     onCursorChange?: (line: number, column: number) => void;
+    onRun?: () => void;
     readOnly?: boolean;
     height?: string;
     language?: string;
 }
 
-export const Editor: React.FC<EditorProps> = ({ 
-    value, 
-    onChange, 
-    onCursorChange, 
+export const Editor: React.FC<EditorProps> = ({
+    value,
+    onChange,
+    onCursorChange,
+    onRun,
     readOnly = false,
     height = '100%',
     language = 'csharp'
 }) => {
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const onRunRef = useRef(onRun);
+    onRunRef.current = onRun;
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -49,7 +53,7 @@ export const Editor: React.FC<EditorProps> = ({
             language,
             theme: 'csharp-light',
             fontSize: 14,
-            fontFamily: 'Consolas, "Courier New", monospace',
+            fontFamily: "var(--font-mono), Consolas, monospace",
             minimap: { enabled: false },
             automaticLayout: true,
             wordWrap: 'on',
@@ -73,7 +77,15 @@ export const Editor: React.FC<EditorProps> = ({
             onCursorChange?.(e.position.lineNumber, e.position.column);
         });
 
-        return () => editorRef.current?.dispose();
+        editorRef.current.addCommand(
+            monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+            () => onRunRef.current?.()
+        );
+
+        return () => {
+            editorRef.current?.dispose();
+            editorRef.current = null;
+        };
     }, []);
 
     useEffect(() => {

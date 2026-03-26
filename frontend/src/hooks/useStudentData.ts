@@ -19,22 +19,18 @@ export const useStudentData = () => {
       setLoading(false);
       return;
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const [assignmentsData, submissionsData] = await Promise.all([
         assignmentsApi.getAll(),
-        submissionsApi.getByStudent(user.id)
+        submissionsApi.getByStudent(user.id),
       ]);
-      
+
       setAssignments(assignmentsData || []);
       setSubmissions(submissionsData || []);
-      
-      if (assignmentsData && assignmentsData.length > 0 && !selectedId) {
-        setSelectedId(assignmentsData[0].id);
-      }
     } catch (err) {
       const message = err instanceof Error ? err.message : t.errors.unknown;
       setError(message);
@@ -42,25 +38,44 @@ export const useStudentData = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, selectedId, t]);
+  }, [user, t]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  const getAssignmentStatus = useCallback((assignmentId: number): 'pending' | 'done' | 'incorrect' => {
-    const submission = submissions.find(s => s.assignmentId === assignmentId);
-    if (!submission) return 'pending';
-    return submission.isCorrect ? 'done' : 'incorrect';
-  }, [submissions]);
+  useEffect(() => {
+    if (assignments.length === 0) return;
+    setSelectedId((prev) => {
+      if (prev !== null && assignments.some((a) => a.id === prev)) {
+        return prev;
+      }
+      return assignments[0].id;
+    });
+  }, [assignments]);
 
-  const getStatusText = useCallback((status: string): string => {
-    switch(status) {
-      case 'done': return t.student.status.done;
-      case 'incorrect': return t.student.status.incorrect;
-      default: return t.student.status.pending;
-    }
-  }, [t]);
+  const getAssignmentStatus = useCallback(
+    (assignmentId: number): 'pending' | 'done' | 'incorrect' => {
+      const submission = submissions.find((s) => s.assignmentId === assignmentId);
+      if (!submission) return 'pending';
+      return submission.isCorrect ? 'done' : 'incorrect';
+    },
+    [submissions]
+  );
+
+  const getStatusText = useCallback(
+    (status: string): string => {
+      switch (status) {
+        case 'done':
+          return t.student.status.done;
+        case 'incorrect':
+          return t.student.status.incorrect;
+        default:
+          return t.student.status.pending;
+      }
+    },
+    [t]
+  );
 
   const refreshSubmissions = useCallback(async () => {
     if (!user) return;
@@ -76,7 +91,8 @@ export const useStudentData = () => {
     setSelectedId(id);
   }, []);
 
-  const currentAssignment = assignments.find(a => a.id === selectedId) || null;
+  const currentAssignment =
+    assignments.find((a) => a.id === selectedId) || null;
 
   return {
     assignments,
@@ -89,6 +105,6 @@ export const useStudentData = () => {
     getStatusText,
     refreshSubmissions,
     selectAssignment,
-    setSubmissions
+    setSubmissions,
   };
 };

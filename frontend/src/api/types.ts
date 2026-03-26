@@ -8,6 +8,25 @@ export interface ExecutionResult {
     executionTime: number;
 }
 
+/** Ответ POST /execute (совпадает с backend services.CompilationResult). */
+export interface CompilationResult {
+    success: boolean;
+    output: string;
+    error: string;
+    timeMs: number;
+    compileMs: number;
+    runMs: number;
+    cacheHit: boolean;
+}
+
+export interface StudentListItem {
+    id: number;
+    username: string;
+    fullName?: string;
+    studentId?: string;
+    group?: string;
+}
+
 export interface Assignment {
     id: number;
     title: string;
@@ -34,7 +53,6 @@ export interface Submission {
 }
 export interface SubmissionDto {
     assignmentId: number;
-    studentId: number;
     code: string;
 }
 

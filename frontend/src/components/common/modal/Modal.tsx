@@ -1,5 +1,4 @@
 import React from 'react';
-import '../../../styles/editor.css'; 
 
 interface ModalProps {
     isOpen: boolean;

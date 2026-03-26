@@ -15,14 +15,24 @@ import (
 
 func CreateSubmission(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		claims := middleware.GetUserFromContext(r)
+		if claims == nil {
+			http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
 		var req struct {
 			AssignmentID int    `json:"assignmentId"`
-			StudentID    int    `json:"studentId"`
 			Code         string `json:"code"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+
+		if req.AssignmentID <= 0 {
+			http.Error(w, `{"error": "assignmentId is required"}`, http.StatusBadRequest)
 			return
 		}
 
@@ -42,10 +52,11 @@ func CreateSubmission(db *sql.DB) http.HandlerFunc {
 
 		isCorrect := result.Success && result.Output == expectedOutput
 
+		studentID := claims.UserID
 		res, err := db.Exec(`
 			INSERT INTO submissions (assignment_id, student_id, code, output, is_correct, error_message, submitted_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, req.AssignmentID, req.StudentID, req.Code, result.Output, isCorrect, result.Error, time.Now())
+		`, req.AssignmentID, studentID, req.Code, result.Output, isCorrect, result.Error, time.Now())
 		if err != nil {
 			http.Error(w, `{"error": "Failed to save submission"}`, http.StatusInternalServerError)
 			return
@@ -74,6 +85,46 @@ func CreateSubmission(db *sql.DB) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(submission)
+	}
+}
+
+func GetAllSubmissions(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rows, err := db.Query(`
+			SELECT s.id, s.assignment_id, s.student_id, s.code, s.output,
+			       s.is_correct, s.error_message, s.grade, s.teacher_comment, s.submitted_at,
+			       COALESCE(u.full_name, '') as student_name
+			FROM submissions s
+			LEFT JOIN users u ON s.student_id = u.id
+			ORDER BY s.submitted_at DESC
+		`)
+		if err != nil {
+			http.Error(w, `{"error": "Database error"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var submissions []models.SubmissionWithStudentName
+		for rows.Next() {
+			var s models.Submission
+			var studentName string
+			err := rows.Scan(
+				&s.ID, &s.AssignmentID, &s.StudentID, &s.Code, &s.Output,
+				&s.IsCorrect, &s.ErrorMessage, &s.Grade, &s.TeacherComment, &s.SubmittedAt,
+				&studentName,
+			)
+			if err != nil {
+				http.Error(w, `{"error": "Failed to scan submission"}`, http.StatusInternalServerError)
+				return
+			}
+			submissions = append(submissions, models.SubmissionWithStudentName{
+				Submission:  s,
+				StudentName: studentName,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(submissions)
 	}
 }
 
@@ -127,10 +178,25 @@ func GetSubmissionsByAssignment(db *sql.DB) http.HandlerFunc {
 
 func GetStudentSubmissions(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		claims := middleware.GetUserFromContext(r)
+		if claims == nil {
+			http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
 		studentIDStr := chi.URLParam(r, "studentId")
 		studentID, err := strconv.Atoi(studentIDStr)
 		if err != nil {
 			http.Error(w, `{"error": "Invalid student ID"}`, http.StatusBadRequest)
+			return
+		}
+
+		if claims.Role == "student" && claims.UserID != studentID {
+			http.Error(w, `{"error": "Forbidden"}`, http.StatusForbidden)
+			return
+		}
+		if claims.Role != "student" && claims.Role != "teacher" {
+			http.Error(w, `{"error": "Forbidden"}`, http.StatusForbidden)
 			return
 		}
 

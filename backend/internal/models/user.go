@@ -34,3 +34,12 @@ type LoginResponse struct {
 	Group    *string `json:"group"`
 	Token    string  `json:"token,omitempty"`
 }
+
+// StudentPublic — данные студента для преподавательской панели (без секретов).
+type StudentPublic struct {
+	ID        int     `json:"id"`
+	Username  string  `json:"username"`
+	FullName  *string `json:"fullName"`
+	StudentID *string `json:"studentId"`
+	Group     *string `json:"group"`
+}

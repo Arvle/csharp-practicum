@@ -13,6 +13,7 @@ interface SubmissionModalProps {
   onGradeChange: (grade: number) => void;
   onCommentChange: (comment: string) => void;
   onSave: () => void;
+  busy?: boolean;
 }
 
 export const SubmissionModal: React.FC<SubmissionModalProps> = ({
@@ -24,7 +25,8 @@ export const SubmissionModal: React.FC<SubmissionModalProps> = ({
   comment,
   onGradeChange,
   onCommentChange,
-  onSave
+  onSave,
+  busy = false,
 }) => {
   const { t } = useTranslation();
 
@@ -35,8 +37,12 @@ export const SubmissionModal: React.FC<SubmissionModalProps> = ({
       <button className="btn btn-secondary" onClick={onClose}>
         {t.common.cancel}
       </button>
-      <button className="btn btn-success" onClick={onSave}>
-        <i className="fas fa-save"></i>
+      <button type="button" className="btn btn-success" onClick={onSave} disabled={busy}>
+        {busy ? (
+          <i className="fas fa-spinner fa-spin" aria-hidden />
+        ) : (
+          <i className="fas fa-save" aria-hidden />
+        )}
         {t.teacher.grading.save}
       </button>
     </>
@@ -85,10 +91,11 @@ export const SubmissionModal: React.FC<SubmissionModalProps> = ({
       <div className="grade-form">
         <div className="form-group">
           <label>{t.teacher.grading.grade}</label>
-          <select 
+          <select
             className="grade-select"
             value={grade}
             onChange={(e) => onGradeChange(Number(e.target.value))}
+            disabled={busy}
           >
             <option value="5">{t.teacher.grading.grades['5']}</option>
             <option value="4">{t.teacher.grading.grades['4']}</option>
@@ -98,12 +105,13 @@ export const SubmissionModal: React.FC<SubmissionModalProps> = ({
         </div>
         <div className="form-group">
           <label>{t.teacher.grading.comment}</label>
-          <textarea 
+          <textarea
             className="grade-input"
             rows={3}
             value={comment}
             onChange={(e) => onCommentChange(e.target.value)}
             placeholder={t.teacher.grading.comment}
+            disabled={busy}
           />
         </div>
       </div>

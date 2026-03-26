@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react';
 import { submissionsApi } from '../api/submissions';
-import { useNotifications, Notification } from '../components/common/hooks/useNotifications';
+import { executeApi } from '../api/execute';
+import { useNotifications } from '../components/common/hooks/useNotifications';
 import { useTranslation } from '../locales';
 
 export const useCodeExecution = (
   assignmentId: number | null,
-  studentId: number,
   onSubmissionComplete?: () => void
 ) => {
   const [code, setCode] = useState('');
@@ -15,47 +15,47 @@ export const useCodeExecution = (
   const { t } = useTranslation();
 
   const handleRun = useCallback(async () => {
-    if (!assignmentId) return;
-    
     setLoading(true);
     setOutput(['⏳ ' + t.common.loading]);
-    
+
     try {
-      const result = await submissionsApi.create({
-        assignmentId,
-        studentId,
-        code
-      });
-      
+      const result = await executeApi.run(code);
+
       const outputLines: string[] = [];
       if (result.output) {
         outputLines.push(...result.output.split('\n'));
       }
-      if (result.errorMessage) {
-        outputLines.push('⚠️ ' + result.errorMessage);
+      if (result.error) {
+        outputLines.push('⚠️ ' + result.error);
       }
-      
-      setOutput(outputLines.length ? outputLines : ['✓ Program executed (no output)']);
-    } catch (error: any) {
-      setOutput(['❌ ' + (error.message || t.errors.unknown)]);
+
+      setOutput(
+        outputLines.length
+          ? outputLines
+          : result.success
+            ? ['✓ Program executed (no output)']
+            : ['❌ ' + (result.error || t.errors.unknown)]
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : t.errors.unknown;
+      setOutput(['❌ ' + message]);
     } finally {
       setLoading(false);
     }
-  }, [assignmentId, studentId, code, t]);
+  }, [code, t]);
 
   const handleSubmit = useCallback(async () => {
     if (!assignmentId) return;
-    
+
     setLoading(true);
     setOutput(['⏳ ' + t.student.submit]);
-    
+
     try {
       const result = await submissionsApi.create({
         assignmentId,
-        studentId,
-        code
+        code,
       });
-      
+
       const outputLines: string[] = [];
       if (result.isCorrect) {
         outputLines.push(t.notifications.correct);
@@ -64,21 +64,25 @@ export const useCodeExecution = (
         outputLines.push(t.notifications.incorrect);
         showNotification('error', t.notifications.submissionFailed);
       }
-      
+
       if (result.output) {
         outputLines.push('📤 ' + t.student.output + ':');
         outputLines.push(...result.output.split('\n'));
       }
-      
+      if (result.errorMessage) {
+        outputLines.push('⚠️ ' + result.errorMessage);
+      }
+
       setOutput(outputLines);
       onSubmissionComplete?.();
-    } catch (error: any) {
-      setOutput(['❌ ' + (error.message || t.errors.unknown)]);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : t.errors.unknown;
+      setOutput(['❌ ' + message]);
       showNotification('error', t.notifications.submissionFailed);
     } finally {
       setLoading(false);
     }
-  }, [assignmentId, studentId, code, onSubmissionComplete, showNotification, t]);
+  }, [assignmentId, code, onSubmissionComplete, showNotification, t]);
 
   const handleReset = useCallback((initialCode: string) => {
     setCode(initialCode);
@@ -93,6 +97,6 @@ export const useCodeExecution = (
     loading,
     handleRun,
     handleSubmit,
-    handleReset
+    handleReset,
   };
 };

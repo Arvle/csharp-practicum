@@ -1,13 +1,13 @@
 package handlers
 
 import (
+	"CSharpPracticum/internal/middleware"
+	"CSharpPracticum/internal/models"
 	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
-
-	"CSharpPracticum/internal/models"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -72,6 +72,12 @@ func GetAssignment(db *sql.DB) http.HandlerFunc {
 
 func CreateAssignment(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		user := middleware.GetUserFromContext(r)
+		if user == nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		var a models.AssignmentDTO
 		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 			http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -83,7 +89,7 @@ func CreateAssignment(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		teacherID := 1
+		teacherID := user.UserID
 
 		result, err := db.Exec(`
 			INSERT INTO assignments (title, description, initial_code, expected_output, created_by_teacher_id, created_at)

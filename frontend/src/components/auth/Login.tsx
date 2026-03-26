@@ -103,15 +103,37 @@ export const Login: React.FC = () => {
     <div className="login-container">
       <div className="login-box">
         <div className="login-header">
-          <i className="fas fa-code login-icon"></i>
+          <i className="fas fa-code login-icon" aria-hidden />
           <h1>{t.app.name}</h1>
-          <p>
+          <p className="login-tagline">{t.app.tagline}</p>
+          <p className="login-mode-title">
             {mode === 'student' && t.auth.student.title}
             {mode === 'teacher' && t.auth.teacher.title}
             {mode === 'register' && t.auth.register.title}
             {mode === 'forgot' && t.auth.forgot.title}
           </p>
         </div>
+
+        {(mode === 'student' || mode === 'teacher') && (
+          <div className="login-features">
+            <div className="login-features-col">
+              <h3>{t.auth.featuresStudentsTitle}</h3>
+              <ul>
+                {t.auth.featuresStudent.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="login-features-col">
+              <h3>{t.auth.featuresTeachersTitle}</h3>
+              <ul>
+                {t.auth.featuresTeacher.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
         <div className="login-tabs">
           <button 
@@ -347,6 +369,8 @@ export const Login: React.FC = () => {
               </div>
             )}
 
+            <p className="login-footnote">{t.auth.registerNote}</p>
+
             <button type="submit" className="login-button">
               <i className="fas fa-user-plus"></i> {t.auth.register.submit}
             </button>
@@ -387,6 +411,8 @@ export const Login: React.FC = () => {
                 {success}
               </div>
             )}
+
+            <p className="login-footnote">{t.auth.forgotNote}</p>
 
             <button type="submit" className="login-button">
               <i className="fas fa-paper-plane"></i> {t.auth.forgot.submit}

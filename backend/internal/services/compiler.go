@@ -3,13 +3,11 @@ package services
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sync"
+	"strings"
 	"time"
 )
 
@@ -24,44 +22,44 @@ type CompilationResult struct {
 }
 
 type CompilerService struct {
-	cacheDir     string
-	cache        sync.Map
-	wasmtimePath string
+	cacheDir string
+	cache    map[string]string // code hash → publish directory with app.dll
 }
 
 func NewCompilerService() *CompilerService {
-	cacheDir, _ := os.MkdirTemp("", "wasm-cache-*")
-	wasmtimePath, _ := exec.LookPath("wasmtime")
+	cacheDir, _ := os.MkdirTemp("", "csharp-run-cache-*")
 
 	return &CompilerService{
-		cacheDir:     cacheDir,
-		wasmtimePath: wasmtimePath,
+		cacheDir: cacheDir,
+		cache:    make(map[string]string),
 	}
 }
 
 func (s *CompilerService) CompileAndRun(code string, timeout time.Duration) CompilationResult {
 	start := time.Now()
 
-	if s.wasmtimePath == "" {
+	if _, err := exec.LookPath("dotnet"); err != nil {
 		return CompilationResult{
 			Success: false,
-			Error:   "WebAssembly runtime not found. Install wasmtime",
+			Error:   "dotnet SDK не найден в PATH. Установите .NET 8+ SDK.",
 			TimeMs:  time.Since(start).Milliseconds(),
 		}
 	}
 
-	codeHash := s.hashCode(code)
+	codeHash := hashCode(code)
 
-	if cached, ok := s.cache.Load(codeHash); ok {
-		wasmPath := cached.(string)
-		result := s.runWasm(wasmPath, timeout, start)
-		result.CacheHit = true
-		result.CompileMs = 0
-		return result
+	if pubDir, ok := s.cache[codeHash]; ok {
+		if _, err := os.Stat(filepath.Join(pubDir, "app.dll")); err == nil {
+			result := s.runPublished(pubDir, timeout, start)
+			result.CacheHit = true
+			result.CompileMs = 0
+			return result
+		}
+		delete(s.cache, codeHash)
 	}
 
 	compileStart := time.Now()
-	wasmPath, err := s.compileToWasm(code, timeout)
+	pubDir, err := s.publishNative(code, codeHash, timeout)
 	compileTime := time.Since(compileStart).Milliseconds()
 
 	if err != nil {
@@ -73,17 +71,17 @@ func (s *CompilerService) CompileAndRun(code string, timeout time.Duration) Comp
 		}
 	}
 
-	s.cache.Store(codeHash, wasmPath)
+	s.cache[codeHash] = pubDir
 
-	result := s.runWasm(wasmPath, timeout, start)
+	result := s.runPublished(pubDir, timeout, start)
 	result.CompileMs = compileTime
 	result.CacheHit = false
 
 	return result
 }
 
-func (s *CompilerService) compileToWasm(code string, timeout time.Duration) (string, error) {
-	tmpDir, err := os.MkdirTemp("", "wasm-compile-*")
+func (s *CompilerService) publishNative(code, codeHash string, timeout time.Duration) (string, error) {
+	tmpDir, err := os.MkdirTemp("", "csharp-compile-*")
 	if err != nil {
 		return "", err
 	}
@@ -94,18 +92,20 @@ func (s *CompilerService) compileToWasm(code string, timeout time.Duration) (str
 		return "", err
 	}
 
+	pubDir := filepath.Join(s.cacheDir, codeHash+"-out")
+	_ = os.RemoveAll(pubDir)
+	if err := os.MkdirAll(pubDir, 0755); err != nil {
+		return "", err
+	}
+
 	csproj := `<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <RuntimeIdentifier>wasi-wasm</RuntimeIdentifier>
-    <PublishTrimmed>true</PublishTrimmed>
-    <PublishSingleFile>true</PublishSingleFile>
-    <WasmEmitSourceMap>false</WasmEmitSourceMap>
-    <Optimize>true</Optimize>
-    <DebugType>none</DebugType>
-    <DebugSymbols>false</DebugSymbols>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <RollForward>LatestMajor</RollForward>
   </PropertyGroup>
 </Project>`
 
@@ -115,8 +115,6 @@ func (s *CompilerService) compileToWasm(code string, timeout time.Duration) (str
 
 	program := fmt.Sprintf(`
 using System;
-using System.Collections.Generic;
-using System.Linq;
 
 class Program
 {
@@ -143,54 +141,57 @@ class Program
 
 	cmd := exec.CommandContext(ctx, "dotnet", "publish",
 		"-c", "Release",
-		"-r", "wasi-wasm",
-		"--self-contained",
-		"--no-restore",
-		"-p:UseAppHost=false",
-		"-p:InvariantGlobalization=true")
+		"-o", pubDir,
+		"--verbosity", "minimal")
 	cmd.Dir = projectDir
 
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("compilation failed: %v\n%s", err, stderr.String())
+		msg := strings.TrimSpace(out.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		_ = os.RemoveAll(pubDir)
+		return "", fmt.Errorf("compilation failed: %w\n%s", err, msg)
 	}
 
-	wasmPath := filepath.Join(projectDir, "bin/Release/net8.0/wasi-wasm/publish/app.wasm")
-
-	if _, err := os.Stat(wasmPath); err != nil {
-		return "", fmt.Errorf("WASM file not found")
+	dllPath := filepath.Join(pubDir, "app.dll")
+	if _, err := os.Stat(dllPath); err != nil {
+		_ = os.RemoveAll(pubDir)
+		return "", fmt.Errorf("после publish не найден app.dll в %s", pubDir)
 	}
 
-	cachedPath := filepath.Join(s.cacheDir, s.hashCode(code)+".wasm")
-	if err := os.Rename(wasmPath, cachedPath); err != nil {
-		return "", err
-	}
-
-	return cachedPath, nil
+	return pubDir, nil
 }
 
-func (s *CompilerService) runWasm(wasmPath string, timeout time.Duration, start time.Time) CompilationResult {
+func (s *CompilerService) runPublished(pubDir string, timeout time.Duration, start time.Time) CompilationResult {
 	runStart := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, s.wasmtimePath,
-		"run",
-		"--disable-cache",
-		"--max-memory=67108864",
-		"--max-instances=1",
-		"--",
-		wasmPath,
-	)
+	dllPath := filepath.Join(pubDir, "app.dll")
+	absDLL, err := filepath.Abs(dllPath)
+	if err != nil {
+		return CompilationResult{
+			Success: false,
+			Error:   err.Error(),
+			TimeMs:  time.Since(start).Milliseconds(),
+			RunMs:   0,
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, "dotnet", absDLL)
+	cmd.Dir = pubDir
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err = cmd.Run()
 	runTime := time.Since(runStart).Milliseconds()
 
 	result := CompilationResult{
@@ -202,7 +203,10 @@ func (s *CompilerService) runWasm(wasmPath string, timeout time.Duration, start 
 		if ctx.Err() == context.DeadlineExceeded {
 			result.Error = fmt.Sprintf("Превышено время выполнения (%v)", timeout)
 		} else {
-			result.Error = stderr.String()
+			result.Error = strings.TrimSpace(stderr.String())
+			if result.Error == "" {
+				result.Error = strings.TrimSpace(stdout.String())
+			}
 			if result.Error == "" {
 				result.Error = err.Error()
 			}
@@ -212,19 +216,18 @@ func (s *CompilerService) runWasm(wasmPath string, timeout time.Duration, start 
 	}
 
 	result.Success = true
-	result.Output = stdout.String()
+	combined := strings.TrimSpace(stdout.String())
+	if combined == "" {
+		combined = strings.TrimSpace(stderr.String())
+	}
+	result.Output = combined
 	return result
 }
 
-func (s *CompilerService) hashCode(code string) string {
-	hash := sha256.Sum256([]byte(code))
-	return hex.EncodeToString(hash[:16])
-}
-
-func (s *CompilerService) ClearCache() {
-	s.cache.Range(func(key, value interface{}) bool {
-		os.Remove(value.(string))
-		s.cache.Delete(key)
-		return true
-	})
+func hashCode(code string) string {
+	hash := 0
+	for i := 0; i < len(code); i++ {
+		hash = (hash << 5) - hash + int(code[i])
+	}
+	return fmt.Sprintf("%x", hash)
 }

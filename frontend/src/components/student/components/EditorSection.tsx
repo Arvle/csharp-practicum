@@ -6,12 +6,14 @@ import { useTranslation } from '../../../locales';
 interface EditorSectionProps {
     code: string;
     onChange: (value: string) => void;
+    onRun?: () => void;
     readOnly?: boolean;
 }
 
 export const EditorSection: React.FC<EditorSectionProps> = ({
     code,
     onChange,
+    onRun,
     readOnly = false
 }) => {
     const [cursorPos, setCursorPos] = useState<{ line: number; column: number }>({ line: 1, column: 1 });
@@ -31,10 +33,11 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 </div>
             </div>
             <div className="editor-area">
-                <Editor 
-                    value={code} 
+                <Editor
+                    value={code}
                     onChange={onChange}
                     onCursorChange={handleCursorChange}
+                    onRun={onRun}
                     readOnly={readOnly}
                 />
             </div>

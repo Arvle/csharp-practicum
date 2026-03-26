@@ -22,11 +22,20 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
+	// Подхватываем .env из корня репозитория и каталога запуска (последние файлы перекрывают предыдущие).
+	for _, envPath := range []string{"../.env", "../../.env", ".env", "backend/.env"} {
+		if _, statErr := os.Stat(envPath); statErr != nil {
+			continue
+		}
+		if err := godotenv.Overload(envPath); err != nil {
+			log.Printf("Warning: could not load %s: %v", envPath, err)
+			continue
+		}
+		log.Printf("Loaded environment from %s", envPath)
 	}
 
-	db, err := database.NewSQLiteDB("csharppracticum.db")
+	dbPath := getEnv("DB_PATH", "csharppracticum.db")
+	db, err := database.NewSQLiteDB(dbPath)
 	if err != nil {
 		log.Fatal("❌ Failed to connect to database:", err)
 	}
@@ -60,16 +69,27 @@ func main() {
 		r.Post("/auth/student/login", handlers.StudentLogin(db))
 		r.Post("/auth/teacher/login", handlers.TeacherLogin(db))
 
-		r.Get("/assignments", handlers.GetAssignments(db))
-		r.Get("/assignments/{id}", handlers.GetAssignment(db))
-		r.Post("/assignments", handlers.CreateAssignment(db))
-		r.Put("/assignments/{id}", handlers.UpdateAssignment(db))
-		r.Delete("/assignments/{id}", handlers.DeleteAssignment(db))
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.JWTAuth)
 
-		r.Post("/submissions", handlers.CreateSubmission(db))
-		r.Get("/submissions/assignment/{assignmentId}", handlers.GetSubmissionsByAssignment(db))
-		r.Get("/submissions/student/{studentId}", handlers.GetStudentSubmissions(db))
-		r.Post("/submissions/{id}/grade", handlers.GradeSubmission(db))
+			r.Post("/execute", handlers.ExecuteCode())
+
+			r.Get("/assignments", handlers.GetAssignments(db))
+			r.Get("/assignments/{id}", handlers.GetAssignment(db))
+			r.Get("/submissions/student/{studentId}", handlers.GetStudentSubmissions(db))
+
+			r.With(middleware.RequireRole("teacher")).Group(func(r chi.Router) {
+				r.Post("/assignments", handlers.CreateAssignment(db))
+				r.Put("/assignments/{id}", handlers.UpdateAssignment(db))
+				r.Delete("/assignments/{id}", handlers.DeleteAssignment(db))
+				r.Get("/students", handlers.GetStudents(db))
+				r.Get("/submissions", handlers.GetAllSubmissions(db))
+				r.Get("/submissions/assignment/{assignmentId}", handlers.GetSubmissionsByAssignment(db))
+				r.Post("/submissions/{id}/grade", handlers.GradeSubmission(db))
+			})
+
+			r.With(middleware.RequireRole("student")).Post("/submissions", handlers.CreateSubmission(db))
+		})
 	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -80,17 +100,20 @@ func main() {
 			"status":      "running",
 			"environment": getEnv("ENV", "development"),
 			"endpoints": []string{
-				"GET  /api/assignments",
-				"GET  /api/assignments/{id}",
-				"POST /api/assignments",
-				"PUT  /api/assignments/{id}",
-				"DELETE /api/assignments/{id}",
 				"POST /api/auth/student/login",
 				"POST /api/auth/teacher/login",
-				"POST /api/submissions",
-				"GET  /api/submissions/assignment/{assignmentId}",
-				"GET  /api/submissions/student/{studentId}",
-				"POST /api/submissions/{id}/grade",
+				"(JWT) POST /api/execute",
+				"(JWT) GET  /api/assignments",
+				"(JWT) GET  /api/assignments/{id}",
+				"(JWT) teacher POST /api/assignments",
+				"(JWT) teacher PUT /api/assignments/{id}",
+				"(JWT) teacher DELETE /api/assignments/{id}",
+				"(JWT) teacher GET  /api/students",
+				"(JWT) teacher GET  /api/submissions",
+				"(JWT) teacher GET  /api/submissions/assignment/{assignmentId}",
+				"(JWT) teacher POST /api/submissions/{id}/grade",
+				"(JWT) GET  /api/submissions/student/{studentId}",
+				"(JWT) student POST /api/submissions",
 			},
 			"frontend": getEnv("FRONTEND_URL", "http://localhost:5173"),
 		}

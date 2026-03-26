@@ -1,9 +1,28 @@
-﻿/* Student layout */
+/* Student layout */
 .student-layout {
   display: flex;
   height: 100vh;
   overflow: hidden;
   background: var(--bg-secondary);
+}
+
+.student-empty-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+}
+
+.student-empty-main .empty-state h2 {
+  font-size: 1.25rem;
+  color: var(--text-primary);
+  margin: var(--spacing-md) 0 var(--spacing-sm);
+}
+
+.student-empty-main .empty-state p {
+  max-width: 36ch;
+  margin: 0 auto;
 }
 
 /* Sidebar */
@@ -35,6 +54,12 @@
 }
 
 .sidebar-header p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+.sidebar-sub {
   font-size: 13px;
   color: var(--text-secondary);
   margin-top: var(--spacing-xs);
@@ -229,6 +254,73 @@
   margin-top: var(--spacing-xs);
 }
 
+.editor-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.editor-desc {
+  margin-top: var(--spacing-sm);
+  max-width: 72ch;
+  line-height: 1.5;
+}
+
+.expected-output-hint {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: flex-start;
+  font-size: 13px;
+  color: var(--info-text);
+}
+
+.expected-output-hint i {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.expected-output-hint strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--info-text);
+}
+
+.expected-output-hint code {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.55);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+  word-break: break-word;
+  color: var(--text-primary);
+}
+
+.draft-hint {
+  flex-shrink: 0;
+  padding: 6px var(--spacing-lg);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.draft-hint i {
+  color: var(--accent-blue);
+}
+
 .editor-actions {
   display: flex;
   gap: var(--spacing-md);
@@ -241,6 +333,32 @@
   overflow: hidden;
   padding: var(--spacing-md);
   gap: var(--spacing-md);
+  min-height: 0;
+}
+
+@media (max-width: 960px) {
+  .student-layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .student-sidebar {
+    width: 100%;
+    max-height: 280px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .editor-container {
+    flex-direction: column;
+    min-height: 60vh;
+  }
+
+  .output-wrapper {
+    width: 100% !important;
+    min-height: 220px;
+  }
 }
 
 .editor-wrapper {

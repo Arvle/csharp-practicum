@@ -20,6 +20,7 @@ export const TableRow: React.FC<TableRowProps> = ({
   onGrade
 }) => {
   const { t } = useTranslation();
+  const canGrade = !!student.lastSubmission;
 
   return (
     <tr>
@@ -45,10 +46,16 @@ export const TableRow: React.FC<TableRowProps> = ({
       <td className="grade-cell">{student.grade || '—'}</td>
       <td className="actions-cell">
         <div className="action-buttons">
-          <button className="action-btn" onClick={onView} title={t.common.view}>
+          <button type="button" className="action-btn" onClick={onView} title={t.common.view}>
             <i className="fas fa-eye"></i>
           </button>
-          <button className="action-btn primary" onClick={onGrade} title={t.teacher.grading.title}>
+          <button
+            type="button"
+            className="action-btn primary"
+            onClick={onGrade}
+            disabled={!canGrade}
+            title={t.teacher.grading.title}
+          >
             <i className="fas fa-star"></i>
           </button>
         </div>
