@@ -3,13 +3,11 @@ package services
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sync"
+	"strings"
 	"time"
 )
 
@@ -25,18 +23,42 @@ type CompilationResult struct {
 
 type CompilerService struct {
 	cacheDir     string
-	cache        sync.Map
+	cache        map[string]string
 	wasmtimePath string
 }
 
 func NewCompilerService() *CompilerService {
 	cacheDir, _ := os.MkdirTemp("", "wasm-cache-*")
-	wasmtimePath, _ := exec.LookPath("wasmtime")
 
 	return &CompilerService{
 		cacheDir:     cacheDir,
-		wasmtimePath: wasmtimePath,
+		cache:        make(map[string]string),
+		wasmtimePath: findWasmtime(),
 	}
+}
+
+func findWasmtime() string {
+	if path, err := exec.LookPath("wasmtime"); err == nil {
+		return path
+	}
+
+	localPaths := []string{
+		"./bin/wasmtime",
+		"./bin/wasmtime.exe",
+		"../bin/wasmtime",
+		"../bin/wasmtime.exe",
+		"bin/wasmtime",
+		"bin/wasmtime.exe",
+	}
+
+	for _, p := range localPaths {
+		if _, err := os.Stat(p); err == nil {
+			absPath, _ := filepath.Abs(p)
+			return absPath
+		}
+	}
+
+	return ""
 }
 
 func (s *CompilerService) CompileAndRun(code string, timeout time.Duration) CompilationResult {
@@ -45,16 +67,15 @@ func (s *CompilerService) CompileAndRun(code string, timeout time.Duration) Comp
 	if s.wasmtimePath == "" {
 		return CompilationResult{
 			Success: false,
-			Error:   "WebAssembly runtime not found. Install wasmtime",
+			Error:   "WebAssembly runtime not found. Install wasmtime or place it in ./bin/",
 			TimeMs:  time.Since(start).Milliseconds(),
 		}
 	}
 
-	codeHash := s.hashCode(code)
+	codeHash := hashCode(code)
 
-	if cached, ok := s.cache.Load(codeHash); ok {
-		wasmPath := cached.(string)
-		result := s.runWasm(wasmPath, timeout, start)
+	if cachedPath, ok := s.cache[codeHash]; ok {
+		result := s.runWasm(cachedPath, timeout, start)
 		result.CacheHit = true
 		result.CompileMs = 0
 		return result
@@ -73,7 +94,7 @@ func (s *CompilerService) CompileAndRun(code string, timeout time.Duration) Comp
 		}
 	}
 
-	s.cache.Store(codeHash, wasmPath)
+	s.cache[codeHash] = wasmPath
 
 	result := s.runWasm(wasmPath, timeout, start)
 	result.CompileMs = compileTime
@@ -163,7 +184,7 @@ class Program
 		return "", fmt.Errorf("WASM file not found")
 	}
 
-	cachedPath := filepath.Join(s.cacheDir, s.hashCode(code)+".wasm")
+	cachedPath := filepath.Join(s.cacheDir, hashCode(code)+".wasm")
 	if err := os.Rename(wasmPath, cachedPath); err != nil {
 		return "", err
 	}
@@ -212,19 +233,14 @@ func (s *CompilerService) runWasm(wasmPath string, timeout time.Duration, start 
 	}
 
 	result.Success = true
-	result.Output = stdout.String()
+	result.Output = strings.TrimSpace(stdout.String())
 	return result
 }
 
-func (s *CompilerService) hashCode(code string) string {
-	hash := sha256.Sum256([]byte(code))
-	return hex.EncodeToString(hash[:16])
-}
-
-func (s *CompilerService) ClearCache() {
-	s.cache.Range(func(key, value interface{}) bool {
-		os.Remove(value.(string))
-		s.cache.Delete(key)
-		return true
-	})
+func hashCode(code string) string {
+	hash := 0
+	for i := 0; i < len(code); i++ {
+		hash = (hash << 5) - hash + int(code[i])
+	}
+	return fmt.Sprintf("%x", hash)
 }
