@@ -6,6 +6,32 @@ import (
 	"time"
 )
 
+const (
+	colorReset  = "\033[0m"
+	colorGet    = "\033[34m"
+	colorPost   = "\033[32m"
+	colorPut    = "\033[33m"
+	colorDelete = "\033[31m"
+)
+
+var methodColors = map[string]string{
+	"GET":    colorGet,
+	"POST":   colorPost,
+	"PUT":    colorPut,
+	"DELETE": colorDelete,
+}
+
+var statusEmojis = map[int]string{
+	200: "✅",
+	201: "✅",
+	204: "✅",
+	400: "⚠️",
+	401: "🔒",
+	403: "🚫",
+	404: "❓",
+	500: "💥",
+}
+
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -19,35 +45,19 @@ func RequestLogger(next http.Handler) http.Handler {
 
 		duration := time.Since(start)
 
-		methodColor := map[string]string{
-			"GET":    "\033[34m",
-			"POST":   "\033[32m",
-			"PUT":    "\033[33m",
-			"DELETE": "\033[31m",
-		}
-
-		statusEmoji := map[int]string{
-			200: "✅",
-			201: "✅",
-			204: "✅",
-			400: "⚠️",
-			401: "🔒",
-			403: "🚫",
-			404: "❓",
-			500: "💥",
-		}
-
-		emoji := statusEmoji[wrw.statusCode]
+		emoji := statusEmojis[wrw.statusCode]
 		if emoji == "" {
 			emoji = "❓"
 		}
 
-		color := methodColor[r.Method]
-		reset := "\033[0m"
+		methodColor := methodColors[r.Method]
+		if methodColor == "" {
+			methodColor = colorReset
+		}
 
 		logMsg := fmt.Sprintf("%s %s%-7s%s %s %d %s %v",
 			emoji,
-			color, r.Method, reset,
+			methodColor, r.Method, colorReset,
 			r.URL.Path,
 			wrw.statusCode,
 			time.Now().Format("15:04:05"),

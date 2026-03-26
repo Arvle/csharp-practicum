@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
-	"CSharpPracticumGo/internal/handlers"
-	"CSharpPracticumGo/internal/middleware"
-	"CSharpPracticumGo/pkg/database"
+	"CSharpPracticum/internal/handlers"
+	"CSharpPracticum/internal/middleware"
+	"CSharpPracticum/pkg/database"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -74,10 +75,10 @@ func main() {
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		response := map[string]interface{}{
-			"name":        "C# Практикум API",
-			"version":     "1.0.0",
+			"name":        getEnv("API_NAME", "C# Практикум API"),
+			"version":     getEnv("API_VERSION", "1.0.0"),
 			"status":      "running",
-			"environment": os.Getenv("ENV"),
+			"environment": getEnv("ENV", "development"),
 			"endpoints": []string{
 				"GET  /api/assignments",
 				"GET  /api/assignments/{id}",
@@ -91,24 +92,22 @@ func main() {
 				"GET  /api/submissions/student/{studentId}",
 				"POST /api/submissions/{id}/grade",
 			},
-			"frontend": "http://localhost:5173 (run separately)",
+			"frontend": getEnv("FRONTEND_URL", "http://localhost:5173"),
 		}
 		json.NewEncoder(w).Encode(response)
 	})
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-
 		dbStatus := "ok"
 		if err := db.Ping(); err != nil {
 			dbStatus = "error: " + err.Error()
 		}
-
 		response := map[string]interface{}{
 			"status":    "healthy",
 			"timestamp": time.Now().Format(time.RFC3339),
 			"database":  dbStatus,
-			"version":   "1.0.0",
+			"version":   getEnv("API_VERSION", "1.0.0"),
 		}
 		json.NewEncoder(w).Encode(response)
 	})
@@ -119,34 +118,33 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "Endpoint not found",
 			"path":  r.URL.Path,
-			"available_endpoints": []string{
-				"/api/...",
-				"/health",
-				"/",
-			},
 		})
 	})
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	port := getEnv("PORT", "8080")
+	readTimeout := getEnvAsInt("READ_TIMEOUT_SECONDS", 15)
+	writeTimeout := getEnvAsInt("WRITE_TIMEOUT_SECONDS", 15)
+	idleTimeout := getEnvAsInt("IDLE_TIMEOUT_SECONDS", 60)
 
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  time.Duration(readTimeout) * time.Second,
+		WriteTimeout: time.Duration(writeTimeout) * time.Second,
+		IdleTimeout:  time.Duration(idleTimeout) * time.Second,
 	}
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("🚀 API Server started on http://localhost:%s", port)
+		log.Printf("🚀 %s v%s started on http://localhost:%s", 
+			getEnv("API_NAME", "API"), 
+			getEnv("API_VERSION", "1.0.0"), 
+			port)
 		log.Printf("📚 API Documentation available at http://localhost:%s/", port)
-		log.Printf("🔄 Frontend should be started separately: cd frontend && npm run dev")
+		log.Printf("🔄 Frontend: %s", getEnv("FRONTEND_URL", "http://localhost:5173"))
+		
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("❌ listen: %s\n", err)
 		}
@@ -162,4 +160,20 @@ func main() {
 		log.Fatalf("❌ Server shutdown failed: %+v", err)
 	}
 	log.Println("✅ Server exited properly")
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvAsInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
 }

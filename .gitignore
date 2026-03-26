@@ -1,40 +1,129 @@
-# Зависимости
-node_modules/
-/frontend/node_modules/
-/backend/vendor/
-
-# Сборка
-/frontend/dist/
-/frontend/build/
-/backend/cmd/api/api
-/backend/cmd/api/api.exe
-
-# Базы данных (кроме схемы)
-*.db
-*.db-journal
-*.sqlite
-*.sqlite3
-
-# Логи
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Env файлы (только примеры)
+# ============================================
+# ENVIRONMENT VARIABLES
+# ============================================
+# Local env files
 .env
 .env.local
-.env.production
+.env.*.local
+!.env.example
+backend/.env
+backend/.env.local
+frontend/.env
+frontend/.env.local
+
+# ============================================
+# BACKEND (Go)
+# ============================================
+# Binaries
+backend/csharppracticum
+backend/csharppracticum.exe
+backend/main
+backend/*.exe
+backend/*.test
+backend/*.out
+backend/bin/
+backend/dist/
+
+# Database files
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+backend/cmd/api/*.db
 
 # IDE
-.vscode/
-.idea/
+backend/.idea/
+backend/.vscode/
+backend/*.swp
+backend/*.swo
+backend/*~
+
+# Dependencies
+backend/vendor/
+
+# Build artifacts
+backend/tmp/
+backend/temp/
+
+# ============================================
+# FRONTEND
+# ============================================
+# Dependencies
+frontend/node_modules/
+frontend/.pnpm-store/
+
+# Build output
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/.cache/
+
+# Environment files
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# IDE
+frontend/.idea/
+frontend/.vscode/
+frontend/*.swp
+frontend/*.swo
+
+# Logs
+frontend/*.log
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# OS files
+frontend/.DS_Store
+frontend/Thumbs.db
+
+# ============================================
+# DOCKER
+# ============================================
+# Docker volumes
+docker-data/
+*.pid
+
+# ============================================
+# OS
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
 *.swp
 *.swo
 *~
-.DS_Store
 
-# Временные файлы компиляции C#
-/backend/temp/
-*.csproj.user
-*.csproj.*.user
+# ============================================
+# LOGS
+# ============================================
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================
+# TEST COVERAGE
+# ============================================
+*.out
+coverage.html
+coverage.out
+*.coverprofile
+
+# ============================================
+# MISC
+# ============================================
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*.sublime-*

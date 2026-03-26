@@ -69,7 +69,7 @@ export const Editor: React.FC<EditorProps> = ({
             onChange(editorRef.current?.getValue() || '');
         });
 
-        editorRef.current.onDidChangeCursorPosition((e) => {
+        editorRef.current.onDidChangeCursorPosition((e: monaco.editor.ICursorPositionChangedEvent) => {
             onCursorChange?.(e.position.lineNumber, e.position.column);
         });
 

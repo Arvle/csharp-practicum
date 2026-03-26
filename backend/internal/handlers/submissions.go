@@ -1,14 +1,14 @@
 package handlers
 
 import (
+	"CSharpPracticum/internal/middleware"
+	"CSharpPracticum/internal/models"
+	"CSharpPracticum/internal/services"
 	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
-
-	"CSharpPracticumGo/internal/models"
-	"CSharpPracticumGo/internal/services"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -37,28 +37,35 @@ func CreateSubmission(db *sql.DB) http.HandlerFunc {
 		}
 
 		compiler := services.NewCompilerService()
-		result := compiler.CompileAndRun(req.Code, 30*time.Second)
+		timeout := 30 * time.Second
+		result := compiler.CompileAndRun(req.Code, timeout)
 
-		var submissionID int64
-		err = db.QueryRow(`
-            INSERT INTO submissions (assignment_id, student_id, code, output, is_correct, error_message, submitted_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            RETURNING id
-        `, req.AssignmentID, req.StudentID, req.Code, result.Output,
-			result.Success && result.Output == expectedOutput, result.Error, time.Now()).Scan(&submissionID)
+		isCorrect := result.Success && result.Output == expectedOutput
 
+		res, err := db.Exec(`
+			INSERT INTO submissions (assignment_id, student_id, code, output, is_correct, error_message, submitted_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, req.AssignmentID, req.StudentID, req.Code, result.Output, isCorrect, result.Error, time.Now())
 		if err != nil {
 			http.Error(w, `{"error": "Failed to save submission"}`, http.StatusInternalServerError)
 			return
 		}
 
+		submissionID, err := res.LastInsertId()
+		if err != nil {
+			http.Error(w, `{"error": "Failed to retrieve submission ID"}`, http.StatusInternalServerError)
+			return
+		}
+
 		var submission models.Submission
 		err = db.QueryRow(`
-            SELECT id, assignment_id, student_id, code, output, is_correct, error_message, submitted_at
-            FROM submissions WHERE id = ?
-        `, submissionID).Scan(&submission.ID, &submission.AssignmentID, &submission.StudentID,
-			&submission.Code, &submission.Output, &submission.IsCorrect, &submission.ErrorMessage, &submission.SubmittedAt)
-
+			SELECT id, assignment_id, student_id, code, output, is_correct, error_message, submitted_at
+			FROM submissions WHERE id = ?
+		`, submissionID).Scan(
+			&submission.ID, &submission.AssignmentID, &submission.StudentID,
+			&submission.Code, &submission.Output, &submission.IsCorrect,
+			&submission.ErrorMessage, &submission.SubmittedAt,
+		)
 		if err != nil {
 			http.Error(w, `{"error": "Failed to retrieve submission"}`, http.StatusInternalServerError)
 			return
@@ -80,31 +87,37 @@ func GetSubmissionsByAssignment(db *sql.DB) http.HandlerFunc {
 		}
 
 		rows, err := db.Query(`
-            SELECT s.id, s.assignment_id, s.student_id, s.code, s.output, 
-                   s.is_correct, s.error_message, s.grade, s.teacher_comment, s.submitted_at,
-                   COALESCE(u.full_name, '') as student_name
-            FROM submissions s
-            LEFT JOIN users u ON s.student_id = u.id
-            WHERE s.assignment_id = ?
-            ORDER BY s.submitted_at DESC
-        `, assignmentID)
+			SELECT s.id, s.assignment_id, s.student_id, s.code, s.output, 
+			       s.is_correct, s.error_message, s.grade, s.teacher_comment, s.submitted_at,
+			       COALESCE(u.full_name, '') as student_name
+			FROM submissions s
+			LEFT JOIN users u ON s.student_id = u.id
+			WHERE s.assignment_id = ?
+			ORDER BY s.submitted_at DESC
+		`, assignmentID)
 		if err != nil {
 			http.Error(w, `{"error": "Database error"}`, http.StatusInternalServerError)
 			return
 		}
 		defer rows.Close()
 
-		var submissions []models.Submission
+		var submissions []models.SubmissionWithStudentName
 		for rows.Next() {
 			var s models.Submission
 			var studentName string
-			err := rows.Scan(&s.ID, &s.AssignmentID, &s.StudentID, &s.Code, &s.Output,
-				&s.IsCorrect, &s.ErrorMessage, &s.Grade, &s.TeacherComment, &s.SubmittedAt, &studentName)
+			err := rows.Scan(
+				&s.ID, &s.AssignmentID, &s.StudentID, &s.Code, &s.Output,
+				&s.IsCorrect, &s.ErrorMessage, &s.Grade, &s.TeacherComment, &s.SubmittedAt,
+				&studentName,
+			)
 			if err != nil {
 				http.Error(w, `{"error": "Failed to scan submission"}`, http.StatusInternalServerError)
 				return
 			}
-			submissions = append(submissions, s)
+			submissions = append(submissions, models.SubmissionWithStudentName{
+				Submission:  s,
+				StudentName: studentName,
+			})
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -122,12 +135,12 @@ func GetStudentSubmissions(db *sql.DB) http.HandlerFunc {
 		}
 
 		rows, err := db.Query(`
-            SELECT id, assignment_id, student_id, code, output, is_correct, 
-                   error_message, grade, teacher_comment, submitted_at
-            FROM submissions
-            WHERE student_id = ?
-            ORDER BY submitted_at DESC
-        `, studentID)
+			SELECT id, assignment_id, student_id, code, output, is_correct, 
+			       error_message, grade, teacher_comment, submitted_at
+			FROM submissions
+			WHERE student_id = ?
+			ORDER BY submitted_at DESC
+		`, studentID)
 		if err != nil {
 			http.Error(w, `{"error": "Database error"}`, http.StatusInternalServerError)
 			return
@@ -137,8 +150,10 @@ func GetStudentSubmissions(db *sql.DB) http.HandlerFunc {
 		var submissions []models.Submission
 		for rows.Next() {
 			var s models.Submission
-			err := rows.Scan(&s.ID, &s.AssignmentID, &s.StudentID, &s.Code, &s.Output,
-				&s.IsCorrect, &s.ErrorMessage, &s.Grade, &s.TeacherComment, &s.SubmittedAt)
+			err := rows.Scan(
+				&s.ID, &s.AssignmentID, &s.StudentID, &s.Code, &s.Output,
+				&s.IsCorrect, &s.ErrorMessage, &s.Grade, &s.TeacherComment, &s.SubmittedAt,
+			)
 			if err != nil {
 				http.Error(w, `{"error": "Failed to scan submission"}`, http.StatusInternalServerError)
 				return
@@ -161,9 +176,8 @@ func GradeSubmission(db *sql.DB) http.HandlerFunc {
 		}
 
 		var req struct {
-			Grade     int    `json:"grade"`
-			Comment   string `json:"comment"`
-			TeacherID int    `json:"teacherId"`
+			Grade   int    `json:"grade"`
+			Comment string `json:"comment"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -171,11 +185,17 @@ func GradeSubmission(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		user := middleware.GetUserFromContext(r)
+		if user == nil || user.Role != "teacher" {
+			http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
 		_, err = db.Exec(`
-            UPDATE submissions
-            SET grade = ?, teacher_comment = ?, graded_at = ?, graded_by_teacher_id = ?
-            WHERE id = ?
-        `, req.Grade, req.Comment, time.Now(), req.TeacherID, id)
+			UPDATE submissions
+			SET grade = ?, teacher_comment = ?, graded_at = ?, graded_by_teacher_id = ?
+			WHERE id = ?
+		`, req.Grade, req.Comment, time.Now(), user.UserID, id)
 		if err != nil {
 			http.Error(w, `{"error": "Failed to save grade"}`, http.StatusInternalServerError)
 			return
@@ -184,4 +204,5 @@ func GradeSubmission(db *sql.DB) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "Grade saved successfully"})
 	}
+	
 }

@@ -1,18 +1,17 @@
-import React from 'react';
-import { useTeacherData } from './hooks/useTeacherData';
+import React, { useState, useEffect } from 'react';
+import { useTeacherData } from '../../hooks/useTeacherData';
 import { useGrading } from './hooks/useGrading';
-import { useNotifications } from '../../components/common/notifications/useNotifications';
-import { UserMenu } from '../../components/common/UserMenu';
+import { useNotifications, Notification } from '../common/hooks/useNotifications';
+import { UserMenu } from '../common/UserMenu';
 import { StatsGrid } from './components/StatsGrid';
 import { StudentsTable } from './components/StudentsTable';
 import { SubmissionModal } from './modals/SubmissionModal';
-import { loadMessages } from '../../config/loader';
-import '../../styles/teacher.css';
+import { useTranslation } from '../../locales';
 
 export const TeacherView: React.FC = () => {
   const { notifications } = useNotifications();
-  const messages = loadMessages('ru');
-  
+  const { t } = useTranslation();
+
   const {
     students,
     setStudents,
@@ -24,7 +23,8 @@ export const TeacherView: React.FC = () => {
     setGroup,
     stats,
     getStatusText,
-    getStatusClass
+    getStatusClass,
+    refreshData,
   } = useTeacherData();
 
   const {
@@ -35,15 +35,22 @@ export const TeacherView: React.FC = () => {
     setComment,
     handleGradeSubmit,
     openGrading,
-    closeGrading
-  } = useGrading(students, setStudents, submissions, setSubmissions, messages);
+    closeGrading,
+    isSubmitting,
+  } = useGrading(students, setStudents, submissions, setSubmissions);
+
+  const [selectedStudentForView, setSelectedStudentForView] = useState<any>(null);
+
+  useEffect(() => {
+    refreshData();
+  }, []);
 
   if (loading) {
     return (
       <div className="loading-screen">
         <div className="loading-content">
           <i className="fas fa-spinner fa-spin"></i>
-          <p>{messages.common.loading}</p>
+          <p>{t.common.loading}</p>
         </div>
       </div>
     );
@@ -51,12 +58,17 @@ export const TeacherView: React.FC = () => {
 
   return (
     <div className="teacher-layout">
-      {notifications.map(n => (
+      {notifications.map((n: Notification) => (
         <div key={n.id} className={`notification ${n.type}`}>
-          <i className={`fas fa-${
-            n.type === 'success' ? 'check-circle' :
-            n.type === 'error' ? 'exclamation-circle' : 'info-circle'
-          }`}></i>
+          <i
+            className={`fas fa-${
+              n.type === 'success'
+                ? 'check-circle'
+                : n.type === 'error'
+                ? 'exclamation-circle'
+                : 'info-circle'
+            }`}
+          ></i>
           {n.message}
         </div>
       ))}
@@ -65,14 +77,22 @@ export const TeacherView: React.FC = () => {
         <div className="sidebar-header">
           <h2>
             <i className="fas fa-chalkboard-teacher"></i>
-            {messages.teacher.dashboard}
+            {t.teacher.dashboard}
           </h2>
-          <span className="group-badge">{group}</span>
+          {group && <span className="group-badge">{group}</span>}
+        </div>
+
+        <div className="sidebar-tabs">
+          <button className="sidebar-tab active">
+            <i className="fas fa-users"></i>
+            {t.teacher.students}
+            {students.length > 0 && <span className="badge">{students.length}</span>}
+          </button>
         </div>
 
         <div className="sidebar-content">
           <div className="students-list">
-            {students.map(student => (
+            {students.map((student: any) => (
               <div key={student.id} className="student-card">
                 <div className="student-card-header">
                   <span className="student-name">{student.name}</span>
@@ -88,9 +108,7 @@ export const TeacherView: React.FC = () => {
                   <span className={`status-badge ${getStatusClass(student.status)}`}>
                     {getStatusText(student.status)}
                   </span>
-                  {student.grade && (
-                    <span className="student-grade">{student.grade}</span>
-                  )}
+                  {student.grade && <span className="student-grade">{student.grade}</span>}
                 </div>
               </div>
             ))}
@@ -103,35 +121,34 @@ export const TeacherView: React.FC = () => {
           <div className="header-left">
             <h1>
               <i className="fas fa-chart-line"></i>
-              {messages.teacher.dashboard}
+              {t.teacher.dashboard}
             </h1>
-            <input 
+            <input
               type="text"
               className="group-input"
               value={group}
-              onChange={(e) => setGroup(e.target.value)}
-              placeholder={messages.auth.group}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGroup(e.target.value)}
+              placeholder={t.auth.student.group}
             />
           </div>
           <UserMenu />
         </div>
 
         <div className="teacher-content">
-          <StatsGrid stats={stats} messages={messages} />
+          <StatsGrid stats={stats} />
 
-          <StudentsTable
-            students={students}
-            assignments={assignments}
-            getStatusClass={getStatusClass}
-            getStatusText={getStatusText}
-            onViewStudent={(student) => console.log('View student:', student)}
-            onGradeStudent={openGrading}
-            messages={messages}
-          />
-
-          <div className="copyright">
-            © {messages.app.name}
+          <div className="students-table-container">
+            <StudentsTable
+              students={students}
+              assignments={assignments}
+              getStatusClass={getStatusClass}
+              getStatusText={getStatusText}
+              onViewStudent={setSelectedStudentForView}
+              onGradeStudent={openGrading}
+            />
           </div>
+
+          <div className="copyright">© {t.app.name}</div>
         </div>
       </div>
 
@@ -139,13 +156,16 @@ export const TeacherView: React.FC = () => {
         isOpen={!!selectedSubmission}
         onClose={closeGrading}
         submission={selectedSubmission}
-        assignment={selectedSubmission ? assignments.find(a => a.id === selectedSubmission.assignmentId) : undefined}
+        assignment={
+          selectedSubmission
+            ? assignments.find((a: any) => a.id === selectedSubmission.assignmentId)
+            : undefined
+        }
         grade={grade}
         comment={comment}
         onGradeChange={setGrade}
         onCommentChange={setComment}
         onSave={handleGradeSubmit}
-        messages={messages}
       />
     </div>
   );

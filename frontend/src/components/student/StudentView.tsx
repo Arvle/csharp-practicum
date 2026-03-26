@@ -1,19 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useStudentData } from './hooks/useStudentData';
-import { useCodeExecution } from './hooks/useCodeExecution';
-import { useNotifications } from '../../components/common/notifications/useNotifications';
-import { UserMenu } from '../../components/common/UserMenu';
+import { useStudentData } from '../../hooks/useStudentData';
+import { useCodeExecution } from '../../hooks/useCodeExecution';
+import { useNotifications, Notification } from '../common/hooks/useNotifications';
+import { UserMenu } from '../common/UserMenu';
 import { StudentSidebar } from './components/StudentSidebar';
 import { EditorSection } from './components/EditorSection';
 import { OutputSection } from './components/OutputSection';
-import { loadMessages } from '../../config/loader';
-import '../../styles/student.css';
+import { useTranslation } from '../../locales';
 
 export const StudentView: React.FC = () => {
   const { user } = useAuth();
   const { notifications } = useNotifications();
-  const messages = loadMessages('ru');
+  const { t } = useTranslation();
   
   const {
     assignments,
@@ -41,14 +40,14 @@ export const StudentView: React.FC = () => {
     if (currentAssignment) {
       handleReset(currentAssignment.initialCode);
     }
-  }, [currentAssignment]);
+  }, [currentAssignment, handleReset]);
 
   if (dataLoading) {
     return (
       <div className="loading-screen">
         <div className="loading-content">
           <i className="fas fa-spinner fa-spin"></i>
-          <p>{messages.common.loading}</p>
+          <p>{t.common.loading}</p>
         </div>
       </div>
     );
@@ -56,7 +55,7 @@ export const StudentView: React.FC = () => {
 
   return (
     <div className="student-layout">
-      {notifications.map(n => (
+      {notifications.map((n: Notification) => ( 
         <div key={n.id} className={`notification ${n.type}`}>
           <i className={`fas fa-${
             n.type === 'success' ? 'check-circle' :
@@ -72,7 +71,6 @@ export const StudentView: React.FC = () => {
         onSelect={selectAssignment}
         getStatus={getAssignmentStatus}
         getStatusText={getStatusText}
-        messages={messages}
       />
 
       <div className="student-main">
@@ -92,7 +90,7 @@ export const StudentView: React.FC = () => {
                   onClick={() => handleReset(currentAssignment.initialCode)}
                 >
                   <i className="fas fa-undo"></i>
-                  {messages.student.reset_code}
+                  {t.editor.reset}
                 </button>
                 <UserMenu />
               </div>
@@ -102,7 +100,6 @@ export const StudentView: React.FC = () => {
               <EditorSection
                 code={code}
                 onChange={setCode}
-                messages={messages}
               />
 
               <OutputSection
@@ -112,7 +109,6 @@ export const StudentView: React.FC = () => {
                 onSubmit={handleSubmit}
                 onClear={() => setOutput([])}
                 showSubmit={true}
-                messages={messages}
               />
             </div>
           </>

@@ -1,23 +1,25 @@
 import React, { useState } from 'react';
 import { Editor } from '../../common/editor/Editor';
 import { CursorStatus } from '../../common/statusBar/CursorStatus';
+import { useTranslation } from '../../../locales';
 
 interface EditorSectionProps {
     code: string;
     onChange: (value: string) => void;
-    title: string;
-    description?: string;
     readOnly?: boolean;
 }
 
 export const EditorSection: React.FC<EditorSectionProps> = ({
     code,
     onChange,
-    title,
-    description,
     readOnly = false
 }) => {
-    const [cursorPos, setCursorPos] = useState({ line: 1, column: 1 });
+    const [cursorPos, setCursorPos] = useState<{ line: number; column: number }>({ line: 1, column: 1 });
+    const { t } = useTranslation();
+
+    const handleCursorChange = (line: number, column: number) => {
+        setCursorPos({ line, column });
+    };
 
     return (
         <div className="editor-wrapper">
@@ -25,14 +27,14 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 <CursorStatus line={cursorPos.line} column={cursorPos.column} />
                 <div className="editor-toolbar-item">
                     <i className="fas fa-language"></i>
-                    <span>C#</span>
+                    <span>{t.editor.language}</span>
                 </div>
             </div>
             <div className="editor-area">
                 <Editor 
                     value={code} 
                     onChange={onChange}
-                    onCursorChange={(line, col) => setCursorPos({ line, column: col })}
+                    onCursorChange={handleCursorChange}
                     readOnly={readOnly}
                 />
             </div>

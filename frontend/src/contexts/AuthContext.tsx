@@ -1,128 +1,78 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-
-interface User {
-    id: number;
-    username: string;
-    role: 'student' | 'teacher';
-    fullName?: string;
-    group?: string;
-    studentId?: string;
-}
-
-interface LoginData {
-    type: 'student' | 'teacher';
-    studentId?: string;
-    fullName?: string;
-    group?: string;
-    accessCode?: string;
-}
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { studentLogin, teacherLogin, StudentLoginData, TeacherLoginData } from '../api/auth';
+import { User } from '../api/types';
+import { getToken, setToken, setUser, removeToken, removeUser, getUser } from '../utils/token';
+import { useTranslation } from '../locales';
 
 interface AuthContextType {
-    user: User | null;
-    login: (data: LoginData) => Promise<boolean>;
-    logout: () => void;
-    isLoading: boolean;
+  user: User | null;
+  login: (data: StudentLoginData | TeacherLoginData, role: 'student' | 'teacher') => Promise<boolean>;
+  logout: () => void;
+  isLoading: boolean;
+  error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const mockLogin = async (data: LoginData): Promise<User | null> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    if (data.type === 'student') {
-        if (!data.studentId || !data.fullName || !data.group) {
-            return null;
-        }
-        
-        return {
-            id: Math.floor(Math.random() * 1000),
-            username: data.studentId,
-            role: 'student',
-            fullName: data.fullName,
-            group: data.group,
-            studentId: data.studentId
-        };
-    } else {
-        if (data.accessCode !== 'teacher_2026' && data.accessCode !== 'admin') {
-            return null;
-        }
-        
-        return {
-            id: 2,
-            username: 'teacher',
-            role: 'teacher',
-            fullName: 'Преподаватель',
-            group: data.group
-        };
-    }
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+  const [user, setUserState] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation();
 
-    useEffect(() => {
-        const savedUser = localStorage.getItem('user');
-        if (savedUser) {
-            try {
-                setUser(JSON.parse(savedUser));
-                setIsLoading(false);
-                return;
-            } catch (e) {
-                console.error('Failed to parse saved user', e);
-                localStorage.removeItem('user');
-            }
-        }
-        
-        console.log('No saved user, auto-login as student for testing');
-        const testUser = {
-            id: 1,
-            username: 'student',
-            role: 'student' as const,
-            fullName: 'Иванов Иван',
-            group: 'ИСП-211',
-            studentId: '12345'
-        };
-        setUser(testUser);
-        localStorage.setItem('user', JSON.stringify(testUser));
-        setIsLoading(false);
-    }, []);
+  useEffect(() => {
+    const token = getToken();
+    const savedUser = getUser();
+    
+    if (token && savedUser) {
+      setUserState(savedUser);
+    }
+    setIsLoading(false);
+  }, []);
 
-    const login = async (data: LoginData): Promise<boolean> => {
-        setIsLoading(true);
-        try {
-            const userData = await mockLogin(data);
-            if (userData) {
-                setUser(userData);
-                localStorage.setItem('user', JSON.stringify(userData));
-                setIsLoading(false);
-                return true;
-            }
-            setIsLoading(false);
-            return false;
-        } catch (error) {
-            console.error('Login error:', error);
-            setIsLoading(false);
-            return false;
-        }
-    };
+  const login = useCallback(async (data: StudentLoginData | TeacherLoginData, role: 'student' | 'teacher'): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      let response;
+      if (role === 'student') {
+        response = await studentLogin(data as StudentLoginData);
+      } else {
+        response = await teacherLogin(data as TeacherLoginData);
+      }
+      
+      setToken(response.token);
+      setUser(response.user);
+      setUserState(response.user);
+      
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t.auth.errors.loginFailed;
+      setError(message);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [t]);
 
-    const logout = () => {
-        setUser(null);
-        localStorage.removeItem('user');
-    };
+  const logout = useCallback(() => {
+    removeToken();
+    removeUser();
+    setUserState(null);
+  }, []);
 
-    return (
-        <AuthContext.Provider value={{ user, login, logout, isLoading }}>
-            {children}
-        </AuthContext.Provider>
-    );
+  return (
+    <AuthContext.Provider value={{ user, login, logout, isLoading, error }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-    return context;
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };

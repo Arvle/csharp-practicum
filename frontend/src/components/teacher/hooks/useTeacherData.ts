@@ -1,66 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Assignment, Submission, StudentWithStats } from '../../../api/types';
-import { apiClient } from '../../../api/client';
+import { assignmentsApi } from '../../../api/assignments';
+import { submissionsApi } from '../../../api/submissions';
+import { useTranslation } from '../../../locales';
 
 export const useTeacherData = () => {
-    const [students, setStudents] = useState<StudentWithStats[]>([]); 
+    const { t } = useTranslation();
+    const [students, setStudents] = useState<StudentWithStats[]>([]);
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [assignments, setAssignments] = useState<Assignment[]>([]);
     const [loading, setLoading] = useState(true);
-    const [group, setGroup] = useState('ИСП-211');
+    const [error, setError] = useState<string | null>(null);
+    const [group, setGroup] = useState('');
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
+        setError(null);
+        
         try {
             const [assignmentsData, submissionsData] = await Promise.all([
-                apiClient.getAssignments(),
-                apiClient.getSubmissions()
+                assignmentsApi.getAll(),
+                submissionsApi.getAll()
             ]);
             
-            setAssignments(assignmentsData);
-            setSubmissions(submissionsData);
-
-            const mockStudents: StudentWithStats[] = [
-                {
-                    id: 1,
-                    name: 'Иванов Иван Иванович',
-                    studentId: '12345',
-                    group: 'ИСП-211',
-                    status: 'completed',
-                    submissions: submissionsData.filter(s => s.studentId === 1),
-                    lastSubmission: submissionsData.find(s => s.studentId === 1),
-                    grade: 5
-                },
-                {
-                    id: 2,
-                    name: 'Петров Петр Петрович',
-                    studentId: '12346',
-                    group: 'ИСП-211',
-                    status: 'in-progress',
-                    submissions: submissionsData.filter(s => s.studentId === 2),
-                    lastSubmission: submissionsData.find(s => s.studentId === 2)
-                },
-                {
-                    id: 3,
-                    name: 'Сидорова Анна Сергеевна',
-                    studentId: '12347',
-                    group: 'ИСП-211',
-                    status: 'not-started',
-                    submissions: []
-                }
-            ];
-
-            setStudents(mockStudents);
-        } catch (error) {
-            console.error('Failed to load data:', error);
+            setAssignments(assignmentsData || []);
+            setSubmissions(submissionsData || []);
+            
+            setStudents([]);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.errors.unknown;
+            setError(message);
+            console.error('Failed to load teacher data:', err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [t]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const stats = {
         total: students.length,
@@ -70,34 +48,39 @@ export const useTeacherData = () => {
         averageGrade: students.reduce((acc, s) => acc + (s.grade || 0), 0) / students.length || 0
     };
 
-    const getStatusText = (status: string): string => {
+    const getStatusText = useCallback((status: string): string => {
         switch(status) {
-            case 'completed': return 'Сдано';
-            case 'in-progress': return 'В процессе';
-            default: return 'Не начато';
+            case 'completed': return t.teacher.status.completed;
+            case 'in-progress': return t.teacher.status.inProgress;
+            default: return t.teacher.status.notStarted;
         }
-    };
+    }, [t]);
 
-    const getStatusClass = (status: string): string => {
+    const getStatusClass = useCallback((status: string): string => {
         switch(status) {
             case 'completed': return 'status-completed';
             case 'in-progress': return 'status-progress';
             default: return 'status-notstarted';
         }
-    };
+    }, []);
+
+    const refreshData = useCallback(() => {
+        loadData();
+    }, [loadData]);
 
     return {
         students,
-        setStudents,     
+        setStudents,
         submissions,
         setSubmissions,
         assignments,
         loading,
+        error,
         group,
         setGroup,
         stats,
         getStatusText,
         getStatusClass,
-        refreshData: loadData
+        refreshData
     };
 };

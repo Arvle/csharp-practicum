@@ -1,13 +1,11 @@
 package models
 
-import (
-	"time"
-)
+import "time"
 
 type User struct {
 	ID           int        `json:"id" db:"id"`
 	Username     string     `json:"username" db:"username"`
-	Email        string     `json:"email" db:"email"`
+	Email        *string    `json:"email" db:"email"`
 	PasswordHash string     `json:"-" db:"password_hash"`
 	Role         string     `json:"role" db:"role"`
 	FullName     *string    `json:"fullName" db:"full_name"`
@@ -34,4 +32,5 @@ type LoginResponse struct {
 	Role     string  `json:"role"`
 	FullName *string `json:"fullName"`
 	Group    *string `json:"group"`
+	Token    string  `json:"token,omitempty"`
 }
