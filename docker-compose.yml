@@ -1,13 +1,27 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=csharppracticum
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
   backend:
     build: ./backend
     ports:
-      - "8080:8080"
+      - "8081:8080"
     environment:
-      - DB_PATH=/root/csharppracticum.db
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/csharppracticum?sslmode=disable
       - JWT_SECRET=your-secret-key-change-me
       - TEACHER_ACCESS_CODE=teacher_2026
       - ALLOWED_ORIGINS=["http://localhost:5173"]
+    depends_on:
+      - postgres
     restart: unless-stopped
 
   frontend:
@@ -17,7 +31,10 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_URL=http://localhost:8080/api
+      - VITE_API_URL=http://localhost:8081/api
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  pg_data:

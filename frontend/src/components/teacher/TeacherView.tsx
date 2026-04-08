@@ -27,7 +27,6 @@ export const TeacherView: React.FC = () => {
     assignments,
     loading,
     group,
-    setGroup,
     stats,
     getStatusText,
     getStatusClass,
@@ -142,18 +141,7 @@ export const TeacherView: React.FC = () => {
               <i className="fas fa-chart-line" aria-hidden />
               {t.teacher.dashboard}
             </h1>
-            <label className="sr-only" htmlFor="group-filter">
-              {t.teacher.filterHint}
-            </label>
-            <input
-              id="group-filter"
-              type="search"
-              className="group-input"
-              value={group}
-              onChange={(e) => setGroup(e.target.value)}
-              placeholder={t.teacher.filterPlaceholder}
-              autoComplete="off"
-            />
+            <p className="group-input">Группа: {group || '—'}</p>
           </div>
           <UserMenu />
         </header>

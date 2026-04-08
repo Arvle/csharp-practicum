@@ -3,8 +3,6 @@ import { User } from './types';
 
 export interface StudentLoginData {
   studentId: string;
-  fullName: string;
-  group: string;
 }
 
 export interface TeacherLoginData {

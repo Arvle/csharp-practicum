@@ -8,6 +8,7 @@ type Assignment struct {
 	Description        string    `json:"description" db:"description"`
 	InitialCode        string    `json:"initialCode" db:"initial_code"`
 	ExpectedOutput     string    `json:"expectedOutput" db:"expected_output"`
+	Group              string    `json:"group" db:"group_name"`
 	CreatedByTeacherID int       `json:"createdByTeacherId" db:"created_by_teacher_id"`
 	CreatedAt          time.Time `json:"createdAt" db:"created_at"`
 }
@@ -18,5 +19,6 @@ type AssignmentDTO struct {
 	Description    string    `json:"description"`
 	InitialCode    string    `json:"initialCode"`
 	ExpectedOutput string    `json:"expectedOutput"`
+	Group          string    `json:"group"`
 	CreatedAt      time.Time `json:"createdAt"`
 }

@@ -24,7 +24,7 @@
 *Backend* 
 - Go 1.21 — высокопроизводительный сервер
 
-- SQLite — база данных
+- PostgreSQL — база данных
 
 - Chi — роутер
 
@@ -88,6 +88,18 @@ npm run dev
 docker-compose up --build
 ```
 Открыть http://localhost:5173
+API в Docker доступен на http://localhost:8081
+
+## Заполнение студентов (SQL-скрипт)
+
+Перед входом студентов добавьте их в БД:
+
+```bash
+Get-Content -Raw backend/scripts/schema.sql | docker compose exec -T postgres psql -U postgres -d csharppracticum
+Get-Content -Raw backend/scripts/seed_students.sql | docker compose exec -T postgres psql -U postgres -d csharppracticum
+```
+
+После этого студент входит только по номеру `studentId` (например `S1001`), а ФИО и группа берутся из базы.
 
 ## **API Endpoints**
 

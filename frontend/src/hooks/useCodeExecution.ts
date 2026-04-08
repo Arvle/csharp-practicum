@@ -9,6 +9,7 @@ export const useCodeExecution = (
   onSubmissionComplete?: () => void
 ) => {
   const [code, setCode] = useState('');
+  const [input, setInput] = useState('');
   const [output, setOutput] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const { showNotification } = useNotifications();
@@ -19,7 +20,7 @@ export const useCodeExecution = (
     setOutput(['⏳ ' + t.common.loading]);
 
     try {
-      const result = await executeApi.run(code);
+      const result = await executeApi.run(code, input);
 
       const outputLines: string[] = [];
       if (result.output) {
@@ -54,11 +55,15 @@ export const useCodeExecution = (
       const result = await submissionsApi.create({
         assignmentId,
         code,
+        input,
       });
 
       const outputLines: string[] = [];
-      if (result.isCorrect) {
+      if (result.status === 'done') {
         outputLines.push(t.notifications.correct);
+        showNotification('success', t.notifications.submissionSuccess);
+      } else if (result.status === 'pending_review') {
+        outputLines.push('⏳ На проверке преподавателем');
         showNotification('success', t.notifications.submissionSuccess);
       } else {
         outputLines.push(t.notifications.incorrect);
@@ -82,7 +87,7 @@ export const useCodeExecution = (
     } finally {
       setLoading(false);
     }
-  }, [assignmentId, code, onSubmissionComplete, showNotification, t]);
+  }, [assignmentId, code, input, onSubmissionComplete, showNotification, t]);
 
   const handleReset = useCallback((initialCode: string) => {
     setCode(initialCode);
@@ -92,6 +97,8 @@ export const useCodeExecution = (
   return {
     code,
     setCode,
+    input,
+    setInput,
     output,
     setOutput,
     loading,

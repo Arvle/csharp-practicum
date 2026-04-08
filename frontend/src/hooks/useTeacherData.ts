@@ -4,6 +4,7 @@ import { submissionsApi } from '../api/submissions';
 import { studentsApi } from '../api/students';
 import { Assignment, Submission, StudentListItem, StudentWithStats } from '../api/types';
 import { useTranslation } from '../locales';
+import { useAuth } from '../contexts/AuthContext';
 
 function buildStudentStats(
   roster: StudentListItem[],
@@ -20,7 +21,7 @@ function buildStudentStats(
     const lastSubmission = studentSubs[0];
     const assignmentCount = assignments.length;
     const correctCount = assignments.filter((a) =>
-      studentSubs.some((s) => s.assignmentId === a.id && s.isCorrect)
+      studentSubs.some((s) => s.assignmentId === a.id && s.status === 'done')
     ).length;
 
     let status: StudentWithStats['status'] = 'not-started';
@@ -47,12 +48,13 @@ function buildStudentStats(
 
 export const useTeacherData = () => {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [studentStats, setStudentStats] = useState<StudentWithStats[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [group, setGroup] = useState('');
+  const group = user?.group || '';
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -85,11 +87,12 @@ export const useTeacherData = () => {
     loadData();
   }, [loadData]);
 
-  const students = useMemo(() => {
-    const g = group.trim().toLowerCase();
-    if (!g) return studentStats;
-    return studentStats.filter((s) => s.group.toLowerCase().includes(g));
-  }, [studentStats, group]);
+  useEffect(() => {
+    const timer = setInterval(loadData, 10000);
+    return () => clearInterval(timer);
+  }, [loadData]);
+
+  const students = useMemo(() => studentStats, [studentStats]);
 
   const stats = {
     total: students.length,
@@ -140,7 +143,6 @@ export const useTeacherData = () => {
     loading,
     error,
     group,
-    setGroup,
     stats,
     getStatusText,
     getStatusClass,

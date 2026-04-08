@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,11 +15,17 @@ import (
 
 func GetAssignments(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		claims := middleware.GetUserFromContext(r)
+		if claims == nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 		rows, err := db.Query(`
-			SELECT id, title, description, initial_code, expected_output, created_at
+			SELECT id, title, description, initial_code, COALESCE(expected_output, ''), group_name, created_at
 			FROM assignments
+			WHERE group_name = $1
 			ORDER BY created_at DESC
-		`)
+		`, claims.Group)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -28,7 +35,7 @@ func GetAssignments(db *sql.DB) http.HandlerFunc {
 		var assignments []models.AssignmentDTO
 		for rows.Next() {
 			var a models.AssignmentDTO
-			err := rows.Scan(&a.ID, &a.Title, &a.Description, &a.InitialCode, &a.ExpectedOutput, &a.CreatedAt)
+			err := rows.Scan(&a.ID, &a.Title, &a.Description, &a.InitialCode, &a.ExpectedOutput, &a.Group, &a.CreatedAt)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -51,11 +58,16 @@ func GetAssignment(db *sql.DB) http.HandlerFunc {
 		}
 
 		var a models.AssignmentDTO
+		claims := middleware.GetUserFromContext(r)
+		if claims == nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 		err = db.QueryRow(`
-			SELECT id, title, description, initial_code, expected_output, created_at
+			SELECT id, title, description, initial_code, COALESCE(expected_output, ''), group_name, created_at
 			FROM assignments
-			WHERE id = ?
-		`, id).Scan(&a.ID, &a.Title, &a.Description, &a.InitialCode, &a.ExpectedOutput, &a.CreatedAt)
+			WHERE id = $1 AND group_name = $2
+		`, id, claims.Group).Scan(&a.ID, &a.Title, &a.Description, &a.InitialCode, &a.ExpectedOutput, &a.Group, &a.CreatedAt)
 
 		if err == sql.ErrNoRows {
 			http.Error(w, "Assignment not found", http.StatusNotFound)
@@ -91,18 +103,20 @@ func CreateAssignment(db *sql.DB) http.HandlerFunc {
 
 		teacherID := user.UserID
 
-		result, err := db.Exec(`
-			INSERT INTO assignments (title, description, initial_code, expected_output, created_by_teacher_id, created_at)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, a.Title, a.Description, a.InitialCode, a.ExpectedOutput, teacherID, time.Now())
+		var id int
+		err := db.QueryRow(`
+			INSERT INTO assignments (title, description, initial_code, expected_output, group_name, created_by_teacher_id, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			RETURNING id
+		`, a.Title, a.Description, a.InitialCode, strings.TrimSpace(a.ExpectedOutput), user.Group, teacherID, time.Now()).Scan(&id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		id, _ := result.LastInsertId()
-		a.ID = int(id)
+		a.ID = id
 		a.CreatedAt = time.Now()
+		a.Group = user.Group
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -120,6 +134,11 @@ func UpdateAssignment(db *sql.DB) http.HandlerFunc {
 		}
 
 		var a models.AssignmentDTO
+		user := middleware.GetUserFromContext(r)
+		if user == nil || user.Role != "teacher" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 			http.Error(w, "Invalid request body", http.StatusBadRequest)
 			return
@@ -127,9 +146,9 @@ func UpdateAssignment(db *sql.DB) http.HandlerFunc {
 
 		result, err := db.Exec(`
 			UPDATE assignments
-			SET title = ?, description = ?, initial_code = ?, expected_output = ?
-			WHERE id = ?
-		`, a.Title, a.Description, a.InitialCode, a.ExpectedOutput, id)
+			SET title = $1, description = $2, initial_code = $3, expected_output = $4
+			WHERE id = $5 AND group_name = $6
+		`, a.Title, a.Description, a.InitialCode, strings.TrimSpace(a.ExpectedOutput), id, user.Group)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -154,7 +173,12 @@ func DeleteAssignment(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		result, err := db.Exec("DELETE FROM assignments WHERE id = ?", id)
+		user := middleware.GetUserFromContext(r)
+		if user == nil || user.Role != "teacher" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		result, err := db.Exec("DELETE FROM assignments WHERE id = $1 AND group_name = $2", id, user.Group)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

@@ -35,7 +35,7 @@ func NewCompilerService() *CompilerService {
 	}
 }
 
-func (s *CompilerService) CompileAndRun(code string, timeout time.Duration) CompilationResult {
+func (s *CompilerService) CompileAndRun(code, input string, timeout time.Duration) CompilationResult {
 	start := time.Now()
 
 	if _, err := exec.LookPath("dotnet"); err != nil {
@@ -50,7 +50,7 @@ func (s *CompilerService) CompileAndRun(code string, timeout time.Duration) Comp
 
 	if pubDir, ok := s.cache[codeHash]; ok {
 		if _, err := os.Stat(filepath.Join(pubDir, "app.dll")); err == nil {
-			result := s.runPublished(pubDir, timeout, start)
+			result := s.runPublished(pubDir, input, timeout, start)
 			result.CacheHit = true
 			result.CompileMs = 0
 			return result
@@ -73,7 +73,7 @@ func (s *CompilerService) CompileAndRun(code string, timeout time.Duration) Comp
 
 	s.cache[codeHash] = pubDir
 
-	result := s.runPublished(pubDir, timeout, start)
+	result := s.runPublished(pubDir, input, timeout, start)
 	result.CompileMs = compileTime
 	result.CacheHit = false
 
@@ -167,7 +167,7 @@ class Program
 	return pubDir, nil
 }
 
-func (s *CompilerService) runPublished(pubDir string, timeout time.Duration, start time.Time) CompilationResult {
+func (s *CompilerService) runPublished(pubDir, input string, timeout time.Duration, start time.Time) CompilationResult {
 	runStart := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -190,6 +190,7 @@ func (s *CompilerService) runPublished(pubDir string, timeout time.Duration, sta
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	cmd.Stdin = strings.NewReader(input)
 
 	err = cmd.Run()
 	runTime := time.Since(runStart).Milliseconds()

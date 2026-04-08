@@ -45,6 +45,12 @@ export const useStudentData = () => {
   }, [loadData]);
 
   useEffect(() => {
+    if (!user) return;
+    const timer = setInterval(loadData, 10000);
+    return () => clearInterval(timer);
+  }, [user, loadData]);
+
+  useEffect(() => {
     if (assignments.length === 0) return;
     setSelectedId((prev) => {
       if (prev !== null && assignments.some((a) => a.id === prev)) {
@@ -58,7 +64,8 @@ export const useStudentData = () => {
     (assignmentId: number): 'pending' | 'done' | 'incorrect' => {
       const submission = submissions.find((s) => s.assignmentId === assignmentId);
       if (!submission) return 'pending';
-      return submission.isCorrect ? 'done' : 'incorrect';
+      if (submission.status === 'pending_review') return 'pending';
+      return submission.status === 'done' ? 'done' : 'incorrect';
     },
     [submissions]
   );

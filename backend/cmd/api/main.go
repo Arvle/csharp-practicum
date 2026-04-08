@@ -34,8 +34,8 @@ func main() {
 		log.Printf("Loaded environment from %s", envPath)
 	}
 
-	dbPath := getEnv("DB_PATH", "csharppracticum.db")
-	db, err := database.NewSQLiteDB(dbPath)
+	databaseURL := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/csharppracticum?sslmode=disable")
+	db, err := database.NewPostgresDB(databaseURL)
 	if err != nil {
 		log.Fatal("❌ Failed to connect to database:", err)
 	}

@@ -33,6 +33,7 @@ export interface Assignment {
     description: string;
     initialCode: string;
     expectedOutput: string;
+    group?: string;
     createdAt: string;
 }
 
@@ -44,6 +45,7 @@ export interface Submission {
     code: string;
     output: string;
     isCorrect: boolean;
+    status: 'pending_review' | 'done' | 'incorrect';
     errorMessage?: string;
     submittedAt: string;
     grade?: number;
@@ -54,6 +56,7 @@ export interface Submission {
 export interface SubmissionDto {
     assignmentId: number;
     code: string;
+    input?: string;
 }
 
 export interface Project {
@@ -67,7 +70,6 @@ export interface Project {
 export interface User {
     id: number;
     username: string;
-    email?: string;
     role: 'student' | 'teacher';
     fullName?: string;
     studentId?: string;

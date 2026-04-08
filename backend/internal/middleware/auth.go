@@ -19,10 +19,11 @@ type UserClaims struct {
 	UserID   int    `json:"user_id"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
+	Group    string `json:"group"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(userID int, username, role string) (string, error) {
+func GenerateToken(userID int, username, role, group string) (string, error) {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		secret = "default-secret-change-me"
@@ -39,6 +40,7 @@ func GenerateToken(userID int, username, role string) (string, error) {
 		UserID:   userID,
 		Username: username,
 		Role:     role,
+		Group:    group,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

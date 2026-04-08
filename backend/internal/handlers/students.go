@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"CSharpPracticum/internal/middleware"
 	"CSharpPracticum/internal/models"
 	"database/sql"
 	"encoding/json"
@@ -9,12 +10,17 @@ import (
 
 func GetStudents(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		claims := middleware.GetUserFromContext(r)
+		if claims == nil || claims.Role != "teacher" {
+			http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
 		rows, err := db.Query(`
 			SELECT id, username, full_name, student_id, group_name
 			FROM users
-			WHERE role = 'student'
+			WHERE role = 'student' AND group_name = $1
 			ORDER BY COALESCE(group_name, ''), COALESCE(full_name, username)
-		`)
+		`, claims.Group)
 		if err != nil {
 			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
 			return

@@ -9,8 +9,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 func StudentLogin(db *sql.DB) http.HandlerFunc {
@@ -21,60 +19,33 @@ func StudentLogin(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		if req.StudentID == "" || req.FullName == "" || req.Group == "" {
-			http.Error(w, `{"error": "All fields are required"}`, http.StatusBadRequest)
+		if strings.TrimSpace(req.StudentID) == "" {
+			http.Error(w, `{"error": "studentId is required"}`, http.StatusBadRequest)
 			return
 		}
 
 		var user models.User
 		err := db.QueryRow(`
-			SELECT id, username, role, full_name, group_name, password_hash
+			SELECT id, username, role, full_name, group_name
 			FROM users
-			WHERE student_id = ? AND role = 'student'
-		`, req.StudentID).Scan(&user.ID, &user.Username, &user.Role, &user.FullName, &user.Group, &user.PasswordHash)
+			WHERE student_id = $1 AND role = 'student'
+		`, strings.TrimSpace(req.StudentID)).Scan(&user.ID, &user.Username, &user.Role, &user.FullName, &user.Group)
 
 		if err == sql.ErrNoRows {
-			plainPassword := req.StudentID
-			hashed, err := bcrypt.GenerateFromPassword([]byte(plainPassword), bcrypt.DefaultCost)
-			if err != nil {
-				http.Error(w, `{"error": "Failed to create user"}`, http.StatusInternalServerError)
-				return
-			}
-
-			var id int64
-			err = db.QueryRow(`
-				INSERT INTO users (username, password_hash, role, full_name, student_id, group_name, created_at, last_login_at)
-				VALUES (?, ?, 'student', ?, ?, ?, ?, ?)
-				RETURNING id
-			`, req.StudentID, string(hashed), req.FullName, req.StudentID, req.Group, time.Now(), time.Now()).Scan(&id)
-
-			if err != nil {
-				http.Error(w, `{"error": "Failed to create user"}`, http.StatusInternalServerError)
-				return
-			}
-
-			user.ID = int(id)
-			user.Username = req.StudentID
-			user.Role = "student"
-			user.FullName = &req.FullName
-			user.Group = &req.Group
-			user.PasswordHash = string(hashed)
-		} else if err != nil {
+			http.Error(w, `{"error": "Student not found. Contact teacher."}`, http.StatusUnauthorized)
+			return
+		}
+		if err != nil {
 			http.Error(w, `{"error": "Database error"}`, http.StatusInternalServerError)
 			return
-		} else {
-			if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.StudentID)); err != nil {
-				http.Error(w, `{"error": "Invalid credentials"}`, http.StatusUnauthorized)
-				return
-			}
-			
-			_, err = db.Exec("UPDATE users SET last_login_at = ? WHERE id = ?", time.Now(), user.ID)
-			if err != nil {
-				
-			}
 		}
+		_, _ = db.Exec("UPDATE users SET last_login_at = $1 WHERE id = $2", time.Now(), user.ID)
 
-		token, err := middleware.GenerateToken(user.ID, user.Username, user.Role)
+		group := ""
+		if user.Group != nil {
+			group = *user.Group
+		}
+		token, err := middleware.GenerateToken(user.ID, user.Username, user.Role, group)
 		if err != nil {
 			http.Error(w, `{"error": "Failed to generate token"}`, http.StatusInternalServerError)
 			return
@@ -115,27 +86,20 @@ func TeacherLogin(db *sql.DB) http.HandlerFunc {
 
 		var user models.User
 		err := db.QueryRow(`
-			SELECT id, username, role, full_name, group_name, password_hash
+			SELECT id, username, role, full_name, group_name
 			FROM users
-			WHERE role = 'teacher' AND username = ?
-		`, "teacher").Scan(&user.ID, &user.Username, &user.Role, &user.FullName, &user.Group, &user.PasswordHash)
+			WHERE role = 'teacher' AND username = $1
+		`, "teacher").Scan(&user.ID, &user.Username, &user.Role, &user.FullName, &user.Group)
 
 		if err == sql.ErrNoRows {
-			plainPassword := "teacher_default"
-			hashed, err := bcrypt.GenerateFromPassword([]byte(plainPassword), bcrypt.DefaultCost)
-			if err != nil {
-				http.Error(w, `{"error": "Failed to create teacher"}`, http.StatusInternalServerError)
-				return
-			}
-
 			fullName := "Преподаватель"
 			group := req.Group
 			var id int64
 			err = db.QueryRow(`
-				INSERT INTO users (username, password_hash, role, full_name, group_name, created_at, last_login_at)
-				VALUES (?, ?, 'teacher', ?, ?, ?, ?)
+				INSERT INTO users (username, role, full_name, group_name, created_at, last_login_at)
+				VALUES ($1, 'teacher', $2, $3, $4, $5)
 				RETURNING id
-			`, "teacher", string(hashed), fullName, group, time.Now(), time.Now()).Scan(&id)
+			`, "teacher", fullName, group, time.Now(), time.Now()).Scan(&id)
 
 			if err != nil {
 				http.Error(w, `{"error": "Failed to create teacher"}`, http.StatusInternalServerError)
@@ -147,27 +111,19 @@ func TeacherLogin(db *sql.DB) http.HandlerFunc {
 			user.Role = "teacher"
 			user.FullName = &fullName
 			user.Group = &group
-			user.PasswordHash = string(hashed)
 		} else if err != nil {
 			http.Error(w, `{"error": "Database error"}`, http.StatusInternalServerError)
 			return
 		} else {
-			if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("teacher_default")); err != nil {
-				// Учётка учителя повреждена или сменился salt — при уже проверенном коде доступа восстанавливаем хеш.
-				hashed, herr := bcrypt.GenerateFromPassword([]byte("teacher_default"), bcrypt.DefaultCost)
-				if herr != nil {
-					http.Error(w, `{"error": "Failed to reset teacher password"}`, http.StatusInternalServerError)
-					return
-				}
-				if _, uerr := db.Exec("UPDATE users SET password_hash = ? WHERE id = ?", string(hashed), user.ID); uerr != nil {
-					http.Error(w, `{"error": "Database error"}`, http.StatusInternalServerError)
-					return
-				}
-			}
-			_, err = db.Exec("UPDATE users SET last_login_at = ? WHERE id = ?", time.Now(), user.ID)
+			_, err = db.Exec("UPDATE users SET group_name = $1, last_login_at = $2 WHERE id = $3", req.Group, time.Now(), user.ID)
+			user.Group = &req.Group
 		}
 
-		token, err := middleware.GenerateToken(user.ID, user.Username, user.Role)
+		group := ""
+		if user.Group != nil {
+			group = *user.Group
+		}
+		token, err := middleware.GenerateToken(user.ID, user.Username, user.Role, group)
 		if err != nil {
 			http.Error(w, `{"error": "Failed to generate token"}`, http.StatusInternalServerError)
 			return

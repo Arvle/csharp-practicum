@@ -37,6 +37,8 @@ export const StudentView: React.FC = () => {
   const {
     code,
     setCode,
+    input,
+    setInput,
     output,
     setOutput,
     loading: execLoading,
@@ -141,6 +143,8 @@ export const StudentView: React.FC = () => {
               <EditorSection code={code} onChange={setCode} onRun={handleRun} />
               <OutputSection
                 output={output}
+                input={input}
+                onInputChange={setInput}
                 loading={execLoading}
                 onRun={handleRun}
                 onSubmit={handleSubmit}

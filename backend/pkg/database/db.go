@@ -4,13 +4,13 @@ import (
 	"database/sql"
 	"log"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func NewSQLiteDB(dbPath string) (*sql.DB, error) {
-	log.Printf("Opening database: %s", dbPath)
+func NewPostgresDB(dsn string) (*sql.DB, error) {
+	log.Printf("Opening PostgreSQL database")
 
-	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on")
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		log.Printf("Failed to open database: %v", err)
 		return nil, err
@@ -32,58 +32,73 @@ func InitSchema(db *sql.DB) error {
 	log.Println("Initializing database schema...")
 
 	schema := `
-    -- Таблица пользователей
+    -- Users
     CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id BIGSERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
-        email TEXT UNIQUE,
-        password_hash TEXT NOT NULL,
         role TEXT NOT NULL CHECK(role IN ('student', 'teacher')),
         full_name TEXT,
         student_id TEXT UNIQUE,
         group_name TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        last_login_at DATETIME
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        last_login_at TIMESTAMPTZ
     );
 
-    -- Таблица заданий
+    -- Assignments
     CREATE TABLE IF NOT EXISTS assignments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id BIGSERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         initial_code TEXT NOT NULL,
-        expected_output TEXT NOT NULL,
-        created_by_teacher_id INTEGER NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expected_output TEXT,
+        group_name TEXT NOT NULL,
+        created_by_teacher_id BIGINT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (created_by_teacher_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
-    -- Таблица решений
+    -- Submissions
     CREATE TABLE IF NOT EXISTS submissions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        assignment_id INTEGER NOT NULL,
-        student_id INTEGER NOT NULL,
+        id BIGSERIAL PRIMARY KEY,
+        assignment_id BIGINT NOT NULL,
+        student_id BIGINT NOT NULL,
         code TEXT NOT NULL,
         output TEXT NOT NULL,
-        is_correct BOOLEAN NOT NULL DEFAULT 0,
+        is_correct BOOLEAN NOT NULL DEFAULT FALSE,
+        status TEXT NOT NULL DEFAULT 'pending_review' CHECK(status IN ('pending_review', 'done', 'incorrect')),
         error_message TEXT,
         grade INTEGER,
         teacher_comment TEXT,
-        submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        graded_at DATETIME,
-        graded_by_teacher_id INTEGER,
+        submitted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        graded_at TIMESTAMPTZ,
+        graded_by_teacher_id BIGINT,
         FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
         FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (graded_by_teacher_id) REFERENCES users(id) ON DELETE SET NULL
     );
 
-    -- Индексы для ускорения запросов
+    -- Indexes
     CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
     CREATE INDEX IF NOT EXISTS idx_users_group ON users(group_name);
     CREATE INDEX IF NOT EXISTS idx_assignments_created_at ON assignments(created_at);
+    CREATE INDEX IF NOT EXISTS idx_assignments_group ON assignments(group_name);
     CREATE INDEX IF NOT EXISTS idx_submissions_assignment ON submissions(assignment_id);
     CREATE INDEX IF NOT EXISTS idx_submissions_student ON submissions(student_id);
     CREATE INDEX IF NOT EXISTS idx_submissions_submitted_at ON submissions(submitted_at);
+
+    -- Lightweight migrations for existing databases
+    ALTER TABLE users DROP COLUMN IF EXISTS email;
+    ALTER TABLE users DROP COLUMN IF EXISTS password_hash;
+    ALTER TABLE assignments ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL DEFAULT 'default';
+    ALTER TABLE assignments ALTER COLUMN expected_output DROP NOT NULL;
+    ALTER TABLE submissions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending_review';
+    UPDATE submissions
+    SET status = CASE
+        WHEN is_correct = TRUE THEN 'done'
+        WHEN is_correct = FALSE THEN 'incorrect'
+        ELSE 'pending_review'
+    END
+    WHERE status IS NULL OR status = '';
     `
 
 	_, err := db.Exec(schema)

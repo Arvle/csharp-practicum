@@ -42,7 +42,7 @@ export const useGrading = (
 
       setSubmissions(prev => prev.map(s =>
         s.id === selectedSubmission.id
-          ? { ...s, grade, teacherComment: comment }
+          ? { ...s, grade, teacherComment: comment, status: 'done', isCorrect: true }
           : s
       ));
 

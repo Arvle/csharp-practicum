@@ -3,6 +3,8 @@ import { useTranslation } from '../../../locales';
 
 interface OutputSectionProps {
   output: string[];
+  input: string;
+  onInputChange: (value: string) => void;
   loading: boolean;
   onRun: () => void;
   onSubmit?: () => void;
@@ -12,6 +14,8 @@ interface OutputSectionProps {
 
 export const OutputSection: React.FC<OutputSectionProps> = ({
   output,
+  input,
+  onInputChange,
   loading,
   onRun,
   onSubmit,
@@ -33,6 +37,17 @@ export const OutputSection: React.FC<OutputSectionProps> = ({
       </div>
       
       <div className="output-content">
+        <div className="form-group" style={{ marginBottom: 12 }}>
+          <label>Ввод для программы (stdin)</label>
+          <textarea
+            className="login-input"
+            rows={3}
+            value={input}
+            onChange={(e) => onInputChange(e.target.value)}
+            placeholder="Введите данные, которые программа читает из Console.ReadLine()"
+            disabled={loading}
+          />
+        </div>
         {output.length === 0 ? (
           <div className="output-line info">
             <i className="fas fa-info-circle"></i>

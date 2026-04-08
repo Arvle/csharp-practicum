@@ -57,7 +57,11 @@ export const StudentWorkModal: React.FC<StudentWorkModalProps> = ({
                   <span
                     className={`pill ${sub.isCorrect ? 'pill-success' : 'pill-warn'}`}
                   >
-                    {sub.isCorrect ? t.student.status.done : t.student.status.incorrect}
+                    {sub.status === 'pending_review'
+                      ? t.student.status.pending
+                      : sub.status === 'done'
+                        ? t.student.status.done
+                        : t.student.status.incorrect}
                   </span>
                   {sub.grade != null && (
                     <span className="pill pill-neutral">
@@ -66,6 +70,7 @@ export const StudentWorkModal: React.FC<StudentWorkModalProps> = ({
                   )}
                 </div>
                 <pre className="code-snippet">{sub.output || '—'}</pre>
+                <pre className="code-snippet">{sub.code || '—'}</pre>
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
