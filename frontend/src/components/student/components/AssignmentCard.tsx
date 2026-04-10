@@ -16,46 +16,39 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
   onSelect
 }) => {
   const { t } = useTranslation();
-  
-  const getStatusClass = () => {
-    switch(status) {
-      case 'done': return 'status-done';
-      case 'incorrect': return 'status-incorrect';
-      default: return 'status-pending';
-    }
+
+  const statusConfig = {
+    done: { class: 'status-done', label: t.student.status.done, icon: 'fa-check-circle' },
+    incorrect: { class: 'status-incorrect', label: t.student.status.incorrect, icon: 'fa-times-circle' },
+    pending: { class: 'status-pending', label: t.student.status.pending, icon: 'fa-clock' }
   };
-  
-  const getStatusText = () => {
-    switch(status) {
-      case 'done': return t.student.status.done;
-      case 'incorrect': return t.student.status.incorrect;
-      default: return t.student.status.pending;
-    }
-  };
+
+  const { class: statusClass, label, icon } = statusConfig[status];
 
   return (
     <div
-      className={`assignment-card ${status === 'done' ? 'completed' : ''} ${isSelected ? 'selected' : ''}`}
+      className={`assignment-card ${isSelected ? 'selected' : ''}`}
       onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') onSelect(); }}
     >
-      <div className="assignment-header">
-        <div className="assignment-title">{assignment.title}</div>
-        <span className={`assignment-status ${getStatusClass()}`}>
-          {getStatusText()}
-        </span>
-      </div>
-      <div className="assignment-description">
-        {assignment.description}
-      </div>
-      <div className="assignment-footer">
-        <span>
-          <i className="far fa-calendar"></i>
-          {new Date(assignment.createdAt).toLocaleDateString()}
-        </span>
-        <span>
-          <i className="fas fa-code"></i>
-          C#
-        </span>
+      <div className="assignment-card-accent" />
+      <div className="assignment-card-body">
+        <div className="assignment-card-top">
+          <h3 className="assignment-card-title">{assignment.title}</h3>
+          <span className={`assignment-status-badge ${statusClass}`}>
+            <i className={`fas ${icon}`} aria-hidden />
+            {label}
+          </span>
+        </div>
+        <p className="assignment-card-desc">{assignment.description}</p>
+        <div className="assignment-card-meta">
+          <time dateTime={assignment.createdAt}>
+            <i className="far fa-calendar" aria-hidden />
+            {new Date(assignment.createdAt).toLocaleDateString()}
+          </time>
+        </div>
       </div>
     </div>
   );

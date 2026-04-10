@@ -8,9 +8,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
+// CompilationResult хранит результат компиляции и выполнения C# кода.
 type CompilationResult struct {
 	Success   bool   `json:"success"`
 	Output    string `json:"output"`
@@ -21,13 +23,20 @@ type CompilationResult struct {
 	CacheHit  bool   `json:"cacheHit"`
 }
 
+// CompilerService отвечает за компиляцию и выполнение C# кода.
 type CompilerService struct {
 	cacheDir string
-	cache    map[string]string // code hash → publish directory with app.dll
+	cache    map[string]string
+	mu       sync.RWMutex
 }
 
+// NewCompilerService создаёт новый сервис компиляции с временным кэшем.
 func NewCompilerService() *CompilerService {
-	cacheDir, _ := os.MkdirTemp("", "csharp-run-cache-*")
+	cacheDir, err := os.MkdirTemp("", "csharp-run-cache-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to create cache dir: %v\n", err)
+		cacheDir = os.TempDir()
+	}
 
 	return &CompilerService{
 		cacheDir: cacheDir,
@@ -35,6 +44,7 @@ func NewCompilerService() *CompilerService {
 	}
 }
 
+// CompileAndRun компилирует и выполняет переданный C# код с указанным вводом.
 func (s *CompilerService) CompileAndRun(code, input string, timeout time.Duration) CompilationResult {
 	start := time.Now()
 
@@ -46,32 +56,71 @@ func (s *CompilerService) CompileAndRun(code, input string, timeout time.Duratio
 		}
 	}
 
-	codeHash := hashCode(code)
+	// Нормализация кода
+	normalized := strings.ReplaceAll(strings.TrimSpace(code), "\r\n", "\n")
+	if normalized == "" {
+		return CompilationResult{
+			Success: false,
+			Error:   "Код пустой",
+			TimeMs:  0,
+		}
+	}
 
-	if pubDir, ok := s.cache[codeHash]; ok {
+	// Определяем, нужно ли оборачивать код
+	wrappedCode, needsWrap := prepareCode(normalized)
+
+	// Ключ кэша основан на финальном коде для компиляции
+	codeHash := hashCode(wrappedCode)
+
+	s.mu.RLock()
+	pubDir, cached := s.cache[codeHash]
+	s.mu.RUnlock()
+
+	if cached {
 		if _, err := os.Stat(filepath.Join(pubDir, "app.dll")); err == nil {
 			result := s.runPublished(pubDir, input, timeout, start)
 			result.CacheHit = true
 			result.CompileMs = 0
 			return result
 		}
+		s.mu.Lock()
 		delete(s.cache, codeHash)
+		s.mu.Unlock()
 	}
 
+	// Компиляция
 	compileStart := time.Now()
-	pubDir, err := s.publishNative(code, codeHash, timeout)
+	pubDir, compileErr := s.publishNative(wrappedCode, codeHash, timeout)
 	compileTime := time.Since(compileStart).Milliseconds()
 
-	if err != nil {
+	if compileErr != nil {
+		// Если компиляция не удалась и код был обёрнут, пробуем без обёртки
+		if needsWrap {
+			pubDir2, compileErr2 := s.publishNative(normalized, hashCode(normalized), timeout)
+			if compileErr2 == nil {
+				// Эта версия сработала, используем её
+				s.mu.Lock()
+				s.cache[hashCode(normalized)] = pubDir2
+				s.mu.Unlock()
+
+				result := s.runPublished(pubDir2, input, timeout, start)
+				result.CompileMs = time.Since(compileStart).Milliseconds()
+				result.CacheHit = false
+				return result
+			}
+		}
+		// Возвращаем исходную ошибку
 		return CompilationResult{
 			Success:   false,
-			Error:     err.Error(),
+			Error:     compileErr.Error(),
 			TimeMs:    time.Since(start).Milliseconds(),
 			CompileMs: compileTime,
 		}
 	}
 
+	s.mu.Lock()
 	s.cache[codeHash] = pubDir
+	s.mu.Unlock()
 
 	result := s.runPublished(pubDir, input, timeout, start)
 	result.CompileMs = compileTime
@@ -80,22 +129,99 @@ func (s *CompilerService) CompileAndRun(code, input string, timeout time.Duratio
 	return result
 }
 
-func (s *CompilerService) publishNative(code, codeHash string, timeout time.Duration) (string, error) {
-	tmpDir, err := os.MkdirTemp("", "csharp-compile-*")
-	if err != nil {
-		return "", err
+// prepareCode определяет, нужно ли оборачивать код в метод Main.
+// Возвращает компилируемый код и флаг применения обёртки.
+func prepareCode(code string) (string, bool) {
+	trimmed := strings.TrimSpace(code)
+
+	// Быстрая проверка: если код содержит "static void Main" или "static async", это полная программа
+	isFullProgram := strings.Contains(strings.ToLower(trimmed), "static") &&
+		(strings.Contains(strings.ToLower(trimmed), "void main") ||
+			strings.Contains(strings.ToLower(trimmed), "task main") ||
+			strings.Contains(strings.ToLower(trimmed), "task<int> main"))
+
+	if isFullProgram {
+		return trimmed, false
 	}
-	defer os.RemoveAll(tmpDir)
+
+	// Проверяем, есть ли уже класс с методом Main
+	// Простая эвристика: ищем "class" и "Main("
+	if strings.Contains(trimmed, "class ") && strings.Contains(trimmed, "Main(") {
+		return trimmed, false
+	}
+
+	// Это фрагмент — оборачиваем
+	return wrapInMain(trimmed), true
+}
+
+// wrapInMain оборачивает фрагмент кода в полноценную C# программу.
+func wrapInMain(code string) string {
+	// Проверяем, есть ли уже директивы using
+	hasUsing := false
+	lines := strings.Split(code, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "using ") {
+			hasUsing = true
+			break
+		}
+	}
+
+	// Оборачиваем в try-catch для отлова ошибок времени выполнения
+	if hasUsing {
+		return fmt.Sprintf(`class Program
+{
+    static void Main()
+    {
+        try
+        {
+%s
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("⚠️ Ошибка: " + ex.Message);
+        }
+    }
+}
+`, code)
+	}
+
+	return fmt.Sprintf(`using System;
+
+class Program
+{
+    static void Main()
+    {
+        try
+        {
+%s
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("⚠️ Ошибка: " + ex.Message);
+        }
+    }
+}
+`, code)
+}
+
+func (s *CompilerService) publishNative(code, codeHash string, timeout time.Duration) (string, error) {
+	tmpDir, err := os.MkdirTemp(s.cacheDir, "csharp-compile-")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
+	}
 
 	projectDir := filepath.Join(tmpDir, "project")
 	if err := os.MkdirAll(projectDir, 0755); err != nil {
-		return "", err
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("failed to create project dir: %w", err)
 	}
 
 	pubDir := filepath.Join(s.cacheDir, codeHash+"-out")
 	_ = os.RemoveAll(pubDir)
 	if err := os.MkdirAll(pubDir, 0755); err != nil {
-		return "", err
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("failed to create publish dir: %w", err)
 	}
 
 	csproj := `<?xml version="1.0" encoding="utf-8"?>
@@ -110,30 +236,13 @@ func (s *CompilerService) publishNative(code, codeHash string, timeout time.Dura
 </Project>`
 
 	if err := os.WriteFile(filepath.Join(projectDir, "app.csproj"), []byte(csproj), 0644); err != nil {
-		return "", err
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("failed to write .csproj: %w", err)
 	}
 
-	program := fmt.Sprintf(`
-using System;
-
-class Program
-{
-    static void Main()
-    {
-        try
-        {
-            %s
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("ERROR: " + ex.Message);
-        }
-    }
-}
-`, code)
-
-	if err := os.WriteFile(filepath.Join(projectDir, "Program.cs"), []byte(program), 0644); err != nil {
-		return "", err
+	if err := os.WriteFile(filepath.Join(projectDir, "Program.cs"), []byte(code), 0644); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("failed to write Program.cs: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -142,7 +251,7 @@ class Program
 	cmd := exec.CommandContext(ctx, "dotnet", "publish",
 		"-c", "Release",
 		"-o", pubDir,
-		"--verbosity", "minimal")
+		"--verbosity", "quiet")
 	cmd.Dir = projectDir
 
 	var out bytes.Buffer
@@ -154,16 +263,19 @@ class Program
 		if msg == "" {
 			msg = err.Error()
 		}
-		_ = os.RemoveAll(pubDir)
-		return "", fmt.Errorf("compilation failed: %w\n%s", err, msg)
+		os.RemoveAll(tmpDir)
+		os.RemoveAll(pubDir)
+		return "", fmt.Errorf("compilation failed: %s", msg)
 	}
 
 	dllPath := filepath.Join(pubDir, "app.dll")
 	if _, err := os.Stat(dllPath); err != nil {
-		_ = os.RemoveAll(pubDir)
-		return "", fmt.Errorf("после publish не найден app.dll в %s", pubDir)
+		os.RemoveAll(tmpDir)
+		os.RemoveAll(pubDir)
+		return "", fmt.Errorf("after publish: app.dll not found")
 	}
 
+	os.RemoveAll(tmpDir)
 	return pubDir, nil
 }
 

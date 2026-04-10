@@ -1,0 +1,6 @@
+.git
+.env
+*.test.exe
+*_test.go
+vendor/
+node_modules/

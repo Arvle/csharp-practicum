@@ -15,11 +15,13 @@ type User struct {
 
 type StudentLoginRequest struct {
 	StudentID string `json:"studentId"`
+	Password  string `json:"password,omitempty"`
 }
 
 type TeacherLoginRequest struct {
 	AccessCode string `json:"accessCode"`
 	Group      string `json:"group"`
+	Password   string `json:"password,omitempty"`
 }
 
 type LoginResponse struct {

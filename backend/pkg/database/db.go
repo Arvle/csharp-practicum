@@ -3,10 +3,14 @@ package database
 import (
 	"database/sql"
 	"log"
+	"os"
+	"strconv"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
+// NewPostgresDB создаёт подключение к PostgreSQL
+// dsn пример: "postgres://user:pass@localhost:5432/dbname?sslmode=disable"
 func NewPostgresDB(dsn string) (*sql.DB, error) {
 	log.Printf("Opening PostgreSQL database")
 
@@ -21,18 +25,32 @@ func NewPostgresDB(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
+	maxOpenConns := getEnvInt("DB_MAX_OPEN_CONNS", 10)
+	maxIdleConns := getEnvInt("DB_MAX_IDLE_CONNS", 5)
 
-	log.Println("Database connection established")
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+
+	log.Printf("Database connection established (pool: max_open=%d, max_idle=%d)", maxOpenConns, maxIdleConns)
 	return db, nil
+}
+
+// getEnvInt читает целочисленное значение из окружения с fallback
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+		log.Printf("Warning: invalid value for %s, using default %d", key, defaultValue)
+	}
+	return defaultValue
 }
 
 func InitSchema(db *sql.DB) error {
 	log.Println("Initializing database schema...")
 
 	schema := `
-    -- Users
+    -- Пользователи
     CREATE TABLE IF NOT EXISTS users (
         id BIGSERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
@@ -40,11 +58,12 @@ func InitSchema(db *sql.DB) error {
         full_name TEXT,
         student_id TEXT UNIQUE,
         group_name TEXT,
+        password_hash TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         last_login_at TIMESTAMPTZ
     );
 
-    -- Assignments
+    -- Задания
     CREATE TABLE IF NOT EXISTS assignments (
         id BIGSERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -57,7 +76,7 @@ func InitSchema(db *sql.DB) error {
         FOREIGN KEY (created_by_teacher_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
-    -- Submissions
+    -- Отправленные решения
     CREATE TABLE IF NOT EXISTS submissions (
         id BIGSERIAL PRIMARY KEY,
         assignment_id BIGINT NOT NULL,
@@ -77,7 +96,7 @@ func InitSchema(db *sql.DB) error {
         FOREIGN KEY (graded_by_teacher_id) REFERENCES users(id) ON DELETE SET NULL
     );
 
-    -- Indexes
+    -- Индексы
     CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
     CREATE INDEX IF NOT EXISTS idx_users_group ON users(group_name);
     CREATE INDEX IF NOT EXISTS idx_assignments_created_at ON assignments(created_at);
@@ -86,9 +105,9 @@ func InitSchema(db *sql.DB) error {
     CREATE INDEX IF NOT EXISTS idx_submissions_student ON submissions(student_id);
     CREATE INDEX IF NOT EXISTS idx_submissions_submitted_at ON submissions(submitted_at);
 
-    -- Lightweight migrations for existing databases
+    -- Легковесные миграции для существующих баз данных
     ALTER TABLE users DROP COLUMN IF EXISTS email;
-    ALTER TABLE users DROP COLUMN IF EXISTS password_hash;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
     ALTER TABLE assignments ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL DEFAULT 'default';
     ALTER TABLE assignments ALTER COLUMN expected_output DROP NOT NULL;
     ALTER TABLE submissions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending_review';

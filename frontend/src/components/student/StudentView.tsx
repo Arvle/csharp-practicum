@@ -99,46 +99,58 @@ export const StudentView: React.FC = () => {
       />
 
       <div className="student-main">
+        {/* Top bar */}
+        <header className="student-topbar">
+          <div className="student-topbar-left">
+            {currentAssignment && (
+              <div className="breadcrumb">
+                <span className="breadcrumb-kicker">{t.student.workspaceKicker}</span>
+                <span className="breadcrumb-sep">/</span>
+                <span className="breadcrumb-title">{currentAssignment.title}</span>
+              </div>
+            )}
+          </div>
+          <div className="student-topbar-right">
+            <UserMenu />
+          </div>
+        </header>
+
         {!currentAssignment ? (
           <div className="student-empty-main">
             <div className="empty-state">
-              <i className="fas fa-inbox" aria-hidden />
+              <div className="empty-state-icon">
+                <i className="fas fa-inbox" aria-hidden />
+              </div>
               <h2>{t.student.noAssignments}</h2>
               <p>{t.student.noAssignmentsHint}</p>
             </div>
           </div>
         ) : (
           <>
-            <header className="editor-header">
-              <div className="editor-info">
-                <p className="editor-kicker">{t.student.workspaceKicker}</p>
-                <h2>
-                  <i className="fas fa-tasks" aria-hidden />
-                  {currentAssignment.title}
-                </h2>
-                <p className="editor-desc">{currentAssignment.description}</p>
-                <div className="expected-output-hint" role="note">
+            {/* Assignment info bar */}
+            <div className="assignment-info-bar">
+              <div className="assignment-meta">
+                <p className="assignment-description">{currentAssignment.description}</p>
+                <div className="expected-output-chip">
                   <i className="fas fa-bullseye" aria-hidden />
-                  <div>
-                    <strong>{t.student.expectedOutputLabel}</strong>
-                    <code>{currentAssignment.expectedOutput || '—'}</code>
-                  </div>
+                  <span>{currentAssignment.expectedOutput || '—'}</span>
                 </div>
               </div>
-              <div className="editor-actions">
-                <button type="button" className="btn btn-secondary" onClick={resetToInitial}>
+              <div className="assignment-actions">
+                <button type="button" className="btn btn-ghost" onClick={resetToInitial}>
                   <i className="fas fa-undo" aria-hidden />
                   {t.editor.reset}
                 </button>
-                <UserMenu />
               </div>
-            </header>
+            </div>
 
-            <p className="draft-hint">
+            {/* Draft hint */}
+            <div className="draft-hint">
               <i className="fas fa-save" aria-hidden />
               {t.student.draftHint}
-            </p>
+            </div>
 
+            {/* Editor + Output */}
             <div className="editor-container">
               <EditorSection code={code} onChange={setCode} onRun={handleRun} />
               <OutputSection

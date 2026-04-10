@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -47,20 +48,31 @@ func main() {
 
 	r := chi.NewRouter()
 
-	r.Use(chimiddleware.Logger)
+	// Security middleware
 	r.Use(chimiddleware.Recoverer)
-	r.Use(chimiddleware.Timeout(60 * time.Second))
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.RequestID)
+	r.Use(middleware.ErrorHandler)
+
+	// Rate limiting: 10 requests per second with burst of 20
+	r.Use(middleware.NewIPRateLimiter(10, 20).RateLimit)
+
+	// Compression and timeouts
 	r.Use(chimiddleware.Compress(5))
+	r.Use(chimiddleware.Timeout(60 * time.Second))
+
+	// CORS - allow configurable origins
+	allowedOrigins := getEnvAsSlice("ALLOWED_ORIGINS", []string{"http://localhost:5173", "http://127.0.0.1:5173"})
+	allowedMethods := getEnvAsSlice("ALLOWED_METHODS", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"})
+	allowedHeaders := getEnvAsSlice("ALLOWED_HEADERS", []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"})
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://127.0.0.1:5173"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedOrigins:   allowedOrigins,
+		AllowedMethods:   allowedMethods,
+		AllowedHeaders:   allowedHeaders,
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
-		MaxAge:           300,
+		MaxAge:           getEnvAsInt("CORS_MAX_AGE", 300),
 	}))
 
 	r.Use(middleware.RequestLogger)
@@ -96,7 +108,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		response := map[string]interface{}{
 			"name":        getEnv("API_NAME", "C# Практикум API"),
-			"version":     getEnv("API_VERSION", "1.0.0"),
+			"version":     getEnv("API_VERSION", "1.1.0"),
 			"status":      "running",
 			"environment": getEnv("ENV", "development"),
 			"endpoints": []string{
@@ -130,7 +142,7 @@ func main() {
 			"status":    "healthy",
 			"timestamp": time.Now().Format(time.RFC3339),
 			"database":  dbStatus,
-			"version":   getEnv("API_VERSION", "1.0.0"),
+			"version":   getEnv("API_VERSION", "1.1.0"),
 		}
 		json.NewEncoder(w).Encode(response)
 	})
@@ -163,7 +175,7 @@ func main() {
 	go func() {
 		log.Printf("🚀 %s v%s started on http://localhost:%s", 
 			getEnv("API_NAME", "API"), 
-			getEnv("API_VERSION", "1.0.0"), 
+			getEnv("API_VERSION", "1.1.0"), 
 			port)
 		log.Printf("📚 API Documentation available at http://localhost:%s/", port)
 		log.Printf("🔄 Frontend: %s", getEnv("FRONTEND_URL", "http://localhost:5173"))
@@ -196,6 +208,28 @@ func getEnvAsInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
+		}
+	}
+	return defaultValue
+}
+
+func getEnvAsSlice(key string, defaultValue []string) []string {
+	if value := os.Getenv(key); value != "" {
+		// Split by comma and trim spaces/quotes
+		parts := strings.Split(value, ",")
+		result := []string{}
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			// Remove surrounding quotes
+			if len(part) >= 2 && part[0] == '"' && part[len(part)-1] == '"' {
+				part = part[1 : len(part)-1]
+			}
+			if part != "" {
+				result = append(result, part)
+			}
+		}
+		if len(result) > 0 {
+			return result
 		}
 	}
 	return defaultValue

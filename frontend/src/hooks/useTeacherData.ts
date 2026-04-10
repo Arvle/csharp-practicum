@@ -56,8 +56,10 @@ export const useTeacherData = () => {
   const [error, setError] = useState<string | null>(null);
   const group = user?.group || '';
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (isBackground = false) => {
+    if (!isBackground) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -79,7 +81,9 @@ export const useTeacherData = () => {
       setError(message);
       console.error('Failed to load teacher data:', err);
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
   }, [t]);
 
@@ -87,9 +91,34 @@ export const useTeacherData = () => {
     loadData();
   }, [loadData]);
 
+  // Smart polling: only when tab is visible, with longer interval
   useEffect(() => {
-    const timer = setInterval(loadData, 10000);
-    return () => clearInterval(timer);
+    let timer: ReturnType<typeof setInterval>;
+
+    const startPolling = () => {
+      timer = setInterval(() => loadData(true), 30000);
+    };
+
+    const stopPolling = () => {
+      clearInterval(timer);
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        loadData(true);
+        startPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [loadData]);
 
   const students = useMemo(() => studentStats, [studentStats]);

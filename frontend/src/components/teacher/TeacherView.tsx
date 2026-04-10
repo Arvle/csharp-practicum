@@ -82,52 +82,59 @@ export const TeacherView: React.FC = () => {
       ))}
 
       <aside className="teacher-sidebar" aria-label={t.teacher.dashboard}>
-        <div className="sidebar-header">
-          <h2>
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-icon purple">
             <i className="fas fa-chalkboard-teacher" aria-hidden />
-            {t.app.name}
-          </h2>
-          <p className="sidebar-sub">{t.teacher.dashboard}</p>
-          {group.trim() ? <span className="group-badge">{group.trim()}</span> : null}
+          </div>
+          <div className="sidebar-brand-text">
+            <h2>{t.app.name}</h2>
+            <p>{t.teacher.dashboard}</p>
+          </div>
         </div>
 
-        <div className="sidebar-tabs" role="tablist">
-          <button type="button" className="sidebar-tab active" role="tab" aria-selected>
+        {group.trim() && (
+          <div className="sidebar-chip">
             <i className="fas fa-users" aria-hidden />
+            {group.trim()}
+          </div>
+        )}
+
+        <div className="sidebar-section-header">
+          <span>
+            <i className="fas fa-user-graduate" aria-hidden />
             {t.teacher.students}
-            {students.length > 0 ? <span className="badge">{students.length}</span> : null}
-          </button>
+          </span>
+          {students.length > 0 && (
+            <span className="sidebar-count">{students.length}</span>
+          )}
         </div>
 
         <div className="sidebar-content">
           <div className="students-list">
             {students.length === 0 ? (
-              <div className="empty-state">
+              <div className="sidebar-empty">
                 <i className="fas fa-user-slash" aria-hidden />
                 <p>{t.teacher.sidebarEmpty}</p>
               </div>
             ) : (
               students.map((student) => (
-                <div key={student.id} className="student-card">
-                  <div className="student-card-header">
-                    <span className="student-name">{student.name}</span>
-                    <span className="student-id">{student.studentId}</span>
+                <button
+                  key={student.id}
+                  type="button"
+                  className="student-mini-card"
+                  onClick={() => setViewStudent(student)}
+                >
+                  <div className="student-mini-top">
+                    <span className="student-mini-name">{student.name}</span>
+                    <span className="student-mini-id">{student.studentId}</span>
                   </div>
-                  <div className="student-info">
-                    <div className="student-info-item">
-                      <i className="fas fa-users" aria-hidden />
-                      {student.group}
-                    </div>
-                  </div>
-                  <div className="student-status">
-                    <span className={`status-badge ${getStatusClass(student.status)}`}>
-                      {getStatusText(student.status)}
-                    </span>
+                  <div className="student-mini-bottom">
+                    <span className={`status-dot ${getStatusClass(student.status)}`} />
                     {student.grade != null ? (
-                      <span className="student-grade">{student.grade}</span>
+                      <span className="mini-grade">{student.grade}</span>
                     ) : null}
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>
@@ -135,21 +142,24 @@ export const TeacherView: React.FC = () => {
       </aside>
 
       <div className="teacher-main">
-        <header className="teacher-header">
-          <div className="header-left">
+        {/* Top bar */}
+        <header className="teacher-topbar">
+          <div className="teacher-topbar-left">
             <h1>
               <i className="fas fa-chart-line" aria-hidden />
               {t.teacher.dashboard}
             </h1>
-            <p className="group-input">Группа: {group || '—'}</p>
           </div>
-          <UserMenu />
+          <div className="teacher-topbar-right">
+            <UserMenu />
+          </div>
         </header>
 
-        <nav className="main-tabs" aria-label={t.common.actions}>
+        {/* Tabs */}
+        <nav className="teacher-tabs" aria-label={t.common.actions}>
           <button
             type="button"
-            className={`main-tab ${mainTab === 'overview' ? 'active' : ''}`}
+            className={`teacher-tab ${mainTab === 'overview' ? 'active' : ''}`}
             onClick={() => setMainTab('overview')}
           >
             <i className="fas fa-table" aria-hidden />
@@ -157,17 +167,18 @@ export const TeacherView: React.FC = () => {
           </button>
           <button
             type="button"
-            className={`main-tab ${mainTab === 'assignments' ? 'active' : ''}`}
+            className={`teacher-tab ${mainTab === 'assignments' ? 'active' : ''}`}
             onClick={() => setMainTab('assignments')}
           >
             <i className="fas fa-tasks" aria-hidden />
             {t.teacher.mainTabAssignments}
             {assignments.length > 0 ? (
-              <span className="badge badge-muted">{assignments.length}</span>
+              <span className="sidebar-count">{assignments.length}</span>
             ) : null}
           </button>
         </nav>
 
+        {/* Content */}
         <div className="teacher-content">
           {mainTab === 'overview' ? (
             <>
@@ -186,8 +197,6 @@ export const TeacherView: React.FC = () => {
           ) : (
             <AssignmentsPanel assignments={assignments} onChanged={refreshData} />
           )}
-
-          <footer className="copyright">© {t.app.name}</footer>
         </div>
       </div>
 

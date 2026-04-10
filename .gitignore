@@ -6,10 +6,23 @@
 .env.local
 .env.*.local
 !.env.example
+!.env.production.template
 backend/.env
 backend/.env.local
 frontend/.env
 frontend/.env.local
+
+# Production secrets (NEVER commit these)
+.env.production
+backend/.env.production
+frontend/.env.production
+
+# ============================================
+# BACKUPS & DATABASE
+# ============================================
+backups/
+*.sql.gz
+*.sql.bak
 
 # ============================================
 # BACKEND (Go)
@@ -20,6 +33,7 @@ backend/csharppracticum.exe
 backend/main
 backend/*.exe
 backend/*.test
+backend/*.test.exe
 backend/*.out
 backend/bin/
 backend/dist/
