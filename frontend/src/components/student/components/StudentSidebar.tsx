@@ -21,30 +21,32 @@ export const StudentSidebar: React.FC<StudentSidebarProps> = ({
     const { t } = useTranslation();
 
     return (
-        <div className="student-sidebar">
-            <div className="sidebar-header">
-                <h2>
-                    <i className="fas fa-code"></i>
-                    {t.app.name}
-                </h2>
-                <p>{t.student.dashboard}</p>
+        <aside className="student-sidebar" aria-label={t.student.dashboard}>
+            <div className="sidebar-brand">
+                <div className="sidebar-brand-icon">
+                    <i className="fas fa-terminal" aria-hidden />
+                </div>
+                <div className="sidebar-brand-text">
+                    <h2>{t.app.name}</h2>
+                    <p>{t.student.dashboard}</p>
+                </div>
             </div>
-            
-            <div className="sidebar-tabs">
-                <button className="sidebar-tab active">
-                    <i className="fas fa-tasks"></i>
+
+            <div className="sidebar-section-header">
+                <span>
+                    <i className="fas fa-tasks" aria-hidden />
                     {t.student.assignments}
-                    {assignments.length > 0 && (
-                        <span className="badge">{assignments.length}</span>
-                    )}
-                </button>
+                </span>
+                {assignments.length > 0 && (
+                    <span className="sidebar-count">{assignments.length}</span>
+                )}
             </div>
 
             <div className="sidebar-content">
                 <div className="assignments-list">
                     {assignments.length === 0 ? (
-                        <div className="empty-state">
-                            <i className="fas fa-tasks"></i>
+                        <div className="sidebar-empty">
+                            <i className="fas fa-inbox" aria-hidden />
                             <p>{t.student.noAssignments}</p>
                         </div>
                     ) : (
@@ -63,6 +65,6 @@ export const StudentSidebar: React.FC<StudentSidebarProps> = ({
                     )}
                 </div>
             </div>
-        </div>
+        </aside>
     );
 };

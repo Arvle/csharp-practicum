@@ -14,13 +14,15 @@ export const useStudentData = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isBackground = false) => {
     if (!user) {
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (!isBackground) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -36,7 +38,9 @@ export const useStudentData = () => {
       setError(message);
       console.error('Failed to load student data:', err);
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
   }, [user, t]);
 
@@ -44,10 +48,36 @@ export const useStudentData = () => {
     loadData();
   }, [loadData]);
 
+  // Smart polling: only when tab is visible, with longer interval
   useEffect(() => {
     if (!user) return;
-    const timer = setInterval(loadData, 10000);
-    return () => clearInterval(timer);
+
+    let timer: ReturnType<typeof setInterval>;
+
+    const startPolling = () => {
+      timer = setInterval(() => loadData(true), 30000);
+    };
+
+    const stopPolling = () => {
+      clearInterval(timer);
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        loadData(true);
+        startPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [user, loadData]);
 
   useEffect(() => {

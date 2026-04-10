@@ -26,84 +26,102 @@ export const OutputSection: React.FC<OutputSectionProps> = ({
 
   return (
     <div className="output-wrapper">
-      <div className="output-header">
-        <h3>
-          <i className="fas fa-terminal"></i>
+      <div className="terminal-bar">
+        <div className="terminal-dots">
+          <span className="terminal-dot red" />
+          <span className="terminal-dot yellow" />
+          <span className="terminal-dot green" />
+        </div>
+        <span className="terminal-title">
+          <i className="fas fa-terminal" aria-hidden />
           {t.student.output}
-        </h3>
-        <button className="btn-icon" onClick={onClear} title={t.common.clear}>
-          <i className="fas fa-eraser"></i>
+        </span>
+        <button className="terminal-clear" onClick={onClear} title={t.common.clear}>
+          <i className="fas fa-eraser" aria-hidden />
         </button>
       </div>
-      
-      <div className="output-content">
-        <div className="form-group" style={{ marginBottom: 12 }}>
-          <label>Ввод для программы (stdin)</label>
-          <textarea
-            className="login-input"
-            rows={3}
-            value={input}
-            onChange={(e) => onInputChange(e.target.value)}
-            placeholder="Введите данные, которые программа читает из Console.ReadLine()"
-            disabled={loading}
-          />
-        </div>
+
+      <div className="terminal-body">
+        {input !== '' && (
+          <div className="terminal-input-group">
+            <label className="terminal-input-label">
+              <i className="fas fa-keyboard" aria-hidden />
+              stdin
+            </label>
+            <textarea
+              className="terminal-input"
+              rows={2}
+              value={input}
+              onChange={(e) => onInputChange(e.target.value)}
+              placeholder="Ввод для Console.ReadLine()"
+              disabled={loading}
+            />
+          </div>
+        )}
+
         {output.length === 0 ? (
-          <div className="output-line info">
-            <i className="fas fa-info-circle"></i>
-            {t.student.noOutput}
+          <div className="terminal-empty">
+            <i className="fas fa-play" aria-hidden />
+            <span>{t.student.noOutput}</span>
           </div>
         ) : (
-          output.map((line, i) => (
-            <div key={i} className={`output-line ${
-              line.includes('✅') || line.includes('✓') ? 'success' :
-              line.includes('❌') || line.includes('✗') ? 'error' :
-              line.includes('⚠️') ? 'warning' :
-              line.includes('⏳') ? 'info' : ''
-            }`}>
-              {line}
-            </div>
-          ))
+          <div className="terminal-lines">
+            {output.map((line, i) => (
+              <div key={i} className={`terminal-line ${
+                line.includes('✅') || line.includes('✓') ? 'success' :
+                line.includes('❌') || line.includes('✗') ? 'error' :
+                line.includes('⚠️') ? 'warning' :
+                line.includes('⏳') ? 'info' : ''
+              }`}>
+                {line}
+              </div>
+            ))}
+          </div>
         )}
       </div>
-      
-      <div className="output-footer">
-        <div className="output-actions">
-          <button 
-            className="btn btn-secondary"
+
+      <div className="terminal-footer">
+        <div className="terminal-actions">
+          <button
+            className="btn-terminal btn-run"
             onClick={onRun}
             disabled={loading}
           >
             {loading ? (
-              <><i className="fas fa-spinner fa-spin"></i> {t.common.loading}</>
+              <>
+                <span className="spinner-sm" />
+                {t.common.loading}
+              </>
             ) : (
-              <><i className="fas fa-play"></i> {t.editor.run}</>
+              <>
+                <i className="fas fa-play" aria-hidden />
+                {t.editor.run}
+              </>
             )}
           </button>
           {showSubmit && onSubmit && (
-            <button 
-              className="btn btn-success"
+            <button
+              className="btn-terminal btn-submit"
               onClick={onSubmit}
               disabled={loading}
             >
               {loading ? (
-                <><i className="fas fa-spinner fa-spin"></i> {t.common.loading}</>
+                <>
+                  <span className="spinner-sm" />
+                  {t.common.loading}
+                </>
               ) : (
-                <><i className="fas fa-paper-plane"></i> {t.editor.submit}</>
+                <>
+                  <i className="fas fa-paper-plane" aria-hidden />
+                  {t.editor.submit}
+                </>
               )}
             </button>
           )}
         </div>
-        <div className="output-footer-info">
-          <span>
-            <i className="fas fa-keyboard"></i>
-            {t.student.runShortcut}
-          </span>
-          <span>
-            <i className="fas fa-clock"></i>
-            {t.student.timeout}
-          </span>
-        </div>
+        <span className="terminal-shortcut">
+          <kbd>Ctrl</kbd>+<kbd>Enter</kbd>
+        </span>
       </div>
     </div>
   );

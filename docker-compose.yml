@@ -2,27 +2,38 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_DB=csharppracticum
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      POSTGRES_DB: csharppracticum
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: csharpDev2026Secure
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: ./backend
     ports:
       - "8081:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/csharppracticum?sslmode=disable
-      - JWT_SECRET=your-secret-key-change-me
-      - TEACHER_ACCESS_CODE=teacher_2026
-      - ALLOWED_ORIGINS=["http://localhost:5173"]
+      DATABASE_URL: postgres://postgres:csharpDev2026Secure@postgres:5432/csharppracticum?sslmode=disable
+      JWT_SECRET: frombock_dunduck
+      TEACHER_ACCESS_CODE: teacher_2026
+      ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     build:
@@ -32,9 +43,14 @@ services:
       - "5173:5173"
     environment:
       - VITE_API_URL=http://localhost:8081/api
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - frontend_node_modules:/app/node_modules
     depends_on:
       - backend
     restart: unless-stopped
 
 volumes:
   pg_data:
+  frontend_node_modules:

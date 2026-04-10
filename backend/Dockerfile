@@ -1,8 +1,5 @@
 FROM golang:1.23-alpine AS builder
 
-# Устанавливаем gcc и musl-dev для CGO
-RUN apk add --no-cache gcc musl-dev
-
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -10,18 +7,24 @@ RUN go mod download
 
 COPY . .
 
-# Включаем CGO и собираем
-RUN CGO_ENABLED=1 GOOS=linux go build -a -o main ./cmd/api/main.go
+# CGO disabled — pgx driver is pure Go, no C compiler needed
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o main ./cmd/api/main.go
 
-# Финальный этап — используем alpine с gcc
-FROM alpine:latest
+# Final stage — Alpine + .NET 8 SDK for C# compilation
+FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS runtime
 
-# Устанавливаем ca-certificates
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S -G appgroup -h /home/appuser appuser
+
 RUN apk --no-cache add ca-certificates
 
-WORKDIR /root/
+WORKDIR /home/appuser/
 
 COPY --from=builder /app/main .
+
+RUN chown appuser:appgroup main
+
+USER appuser:appgroup
 
 EXPOSE 8080
 
