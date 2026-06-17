@@ -1,0 +1,29 @@
+{$DOMAIN:localhost} {
+    encode gzip zstd
+
+    @api path /api/* /health /execute/ws
+    reverse_proxy @api backend:8080 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_addr}
+        header_up X-Forwarded-For {remote_addr}
+        header_up X-Forwarded-Proto {scheme}
+        flush_interval -1
+    }
+
+    handle /uploads/* {
+        root * /app
+        file_server
+        header Cache-Control "private, max-age=3600"
+    }
+
+    handle /health {
+        respond "ok" 200
+    }
+
+    reverse_proxy frontend:80 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_addr}
+        header_up X-Forwarded-For {remote_addr}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
